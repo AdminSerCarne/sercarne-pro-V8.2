@@ -1,6 +1,7 @@
 
 import { supabase } from '@/lib/customSupabaseClient';
 import { normalizeCity } from '@/utils/normalizeCity';
+import { getStockBreakdown } from '@/utils/stockValidator';
 
 const SPREADSHEET_ID = '12wPGal_n7PKYFGz9W__bXgK4mly2NbrEEGwTrIDCzcI';
 const SHEET_NAME = '2026 Base Catalogo Precifica V2';
@@ -445,23 +446,31 @@ export const schlosserApi = {
   },
 
   async calculateAvailableStock(codigo, deliveryDate) {
-      console.log(`[schlosserApi] calculateAvailableStock for SKU: ${codigo}, Date: ${deliveryDate}`);
-      
-      // 1. Get Incoming Stock
-      const incomingStock = await this.getStockByProduct(codigo);
-      const targetDate = new Date(deliveryDate);
-      targetDate.setHours(23, 59, 59, 999);
-      const targetDateStr = targetDate.toISOString().split('T')[0];
+  const safeCode = String(codigo).trim();
 
-      const entradas_total = incomingStock.reduce((acc, entry) => {
-          const entryDate = new Date(entry.data_entrada);
-          const entryDateStr = entryDate.toISOString().split('T')[0];
-          
-          if (entryDateStr <= targetDateStr) {
-              return acc + (Number(entry.qtd_und) || 0);
-          }
-          return acc;
-      }, 0);
+  // Aceita Date ou string e normaliza para "YYYY-MM-DD"
+  const dateObj = deliveryDate instanceof Date ? deliveryDate : new Date(deliveryDate);
+  const targetDateStr = isNaN(dateObj.getTime())
+    ? String(deliveryDate).split('T')[0]
+    : dateObj.toISOString().split('T')[0];
+
+  console.groupCollapsed(`[schlosserApi] calculateAvailableStock (OFFICIAL) ${safeCode} @ ${targetDateStr}`);
+
+  // ✅ Fonte oficial: stockValidator (Base = coluna H / Entradas = Sheets / Pedidos = Supabase)
+  const breakdown = await getStockBreakdown(safeCode, targetDateStr);
+
+  console.log('[schlosserApi] Breakdown:', breakdown);
+  console.groupEnd();
+
+  return {
+    codigo: safeCode,
+    deliveryDate: targetDateStr,
+    totalStock: (breakdown.base || 0) + (breakdown.entradas || 0),
+    confirmedOrders: breakdown.pedidos || 0,
+    availableStock: breakdown.available || 0,
+    breakdown
+  };
+}
 
       // 2. Get Confirmed Orders
       const { orders: allOrders } = await this.getOrdersByProduct(codigo);
