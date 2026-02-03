@@ -25,7 +25,7 @@ const ProductCard = ({ product }) => {
 
   // Determine Pricing
   const cartTotalUND = (cartItems || []).reduce((sum, i) => {
-  const q = Number(i.quantidade ?? i.quantity ?? 0);
+  const q = Number(i.quantidade ?? i.quantity ?? i.quantity_unit ?? 0);
   return sum + (isNaN(q) ? 0 : q);
 }, 0);
 
@@ -92,7 +92,8 @@ const { price, tabName } = schlosserRules.getTabelaAplicada(totalUNDIfAdd, user,
   };
 
   useEffect(() => {
-    let isMounted = true;
+  if (user) console.log(`[PRICE] SKU ${product.codigo} -> UND_TOTAL ${totalUNDIfAdd} => ${tabName} = ${price}`);
+}, [user, product.codigo, totalUNDIfAdd, tabName, price]);
 
     const fetchStock = async () => {
       if (!product.codigo) return;
