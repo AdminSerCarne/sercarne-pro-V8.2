@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { useToast } from '@/components/ui/use-toast';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 import { schlosserRules } from '@/domain/schlosserRules';
@@ -8,9 +7,7 @@ const CartContext = createContext();
 
 export const useCart = () => {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
+  if (!context) throw new Error('useCart must be used within a CartProvider');
   return context;
 };
 
@@ -26,14 +23,11 @@ export const CartProvider = ({ children }) => {
     route_city: ''
   });
 
-  // Trigger for refetching stock
   const [stockUpdateTrigger, setStockUpdateTrigger] = useState(0);
 
-  const { toast } = useToast();
-  // Access user for pricing calculations
   const { user } = useSupabaseAuth();
 
-  // Helper: total UND do carrinho (regra do manual CAP 7)
+  // ✅ UND total do carrinho (CAP 7)
   const getTotalUND = useCallback((items) => {
     return (items || []).reduce((sum, i) => {
       const q = Number(i?.quantidade ?? i?.quantity ?? 0);
@@ -41,61 +35,180 @@ export const CartProvider = ({ children }) => {
     }, 0);
   }, []);
 
-  // Helper: reaplicar tabela em TODOS itens baseado no total UND
+  /**
+   * ✅ Reaplica tabela/preço em TODOS os itens conforme UND total do carrinho.
+   * Regra do Manual: a tabela é definida pelo UND total do carrinho, e o cliente não vê a tabela.
+   */
   const reapplyPriceTables = useCallback((items) => {
     const totalUND = getTotalUND(items);
 
-    return (items || []).map(item => {
-      // item.prices vem do schlosserApi/getProducts e deve viajar junto no item
+    return (items || []).map((item) => {
       const tabelas = item?.prices || item?.tabelas || {};
+      const currentPrice = Number(item?.price ?? item?.preco ?? item?.price_per_kg ?? 0);
 
       const { price } = schlosserRules.getTabelaAplicada(totalUND, user, tabelas);
 
+      // fallback: se não tiver tabelas no item, não zera — mantém o que já tem
+      const finalPrice = Number(price);
       return {
         ...item,
-        price // preço por KG aplicado (TAB1/TAB0/TAB4 ou fallback TAB3)
+        price: Number.isFinite(finalPrice) && finalPrice > 0 ? finalPrice : currentPrice
       };
     });
   }, [getTotalUND, user]);
 
-  // Load cart from localStorage on mount
+  // ✅ Load cart from localStorage on mount
   useEffect(() => {
     const savedCart = localStorage.getItem('schlosser_cart');
     if (savedCart) {
       try {
         const parsed = JSON.parse(savedCart);
-
-        // Segurança: ao carregar, reaplica tabela conforme UND total atual
         if (Array.isArray(parsed) && parsed.length > 0) {
           setCartItems(reapplyPriceTables(parsed));
-        } else {
-          setCartItems([]);
         }
       } catch (e) {
         console.error("Error loading cart", e);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // roda só uma vez (mount)
+  }, []);
 
-  // Save cart to localStorage on change
+  // ✅ Save cart to localStorage on change
   useEffect(() => {
     localStorage.setItem('schlosser_cart', JSON.stringify(cartItems));
   }, [cartItems]);
 
+  // ✅ Se logar/deslogar, recalcula preços (B2B vs público)
+  useEffect(() => {
+    setCartItems((prev) => (prev?.length ? reapplyPriceTables(prev) : prev));
+  }, [user, reapplyPriceTables]);
+
   const notifyStockUpdate = useCallback(() => {
-    setStockUpdateTrigger(prev => prev + 1);
+    setStockUpdateTrigger((prev) => prev + 1);
   }, []);
 
   const openCart = useCallback(() => setIsCartOpen(true), []);
   const closeCart = useCallback(() => setIsCartOpen(false), []);
 
+  /**
+   * ✅ Add item e depois reaplica tabela do carrinho todo (CAP 7)
+   */
   const addToCart = useCallback((product, quantity, variant = null) => {
-    // O preço que entra aqui já vem calculado no ProductCard
-    const priceToStore = product.price || product.preco || product.price_per_kg || 0;
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty < 1) return;
 
-    console.log(`[CartContext] Adding item ${product.codigo}. Price: ${priceToStore}, Qty: ${quantity}`);
+    setCartItems((prev) => {
+      const code = String(product.codigo).trim();
+      const existingItem = prev.find((i) => String(i.codigo).trim() === code);
 
-    setCartItems(prev => {
-      let next = [];
+      let next;
+      if (existingItem) {
+        next = prev.map((i) =>
+          String(i.codigo).trim() === code
+            ? { ...i, quantidade: Number(i.quantidade || 0) + qty, variant }
+            : i
+        );
+      } else {
+        next = [...prev, { ...product, quantidade: qty, variant }];
+      }
 
+      // ✅ recalcula preços de todos os itens conforme UND total
+      return reapplyPriceTables(next);
+    });
+  }, [reapplyPriceTables]);
+
+  /**
+   * ✅ Remover item e reaplicar tabela (UND total muda)
+   */
+  const removeFromCart = useCallback((codigo) => {
+    setCartItems((prev) => {
+      const next = prev.filter((item) => String(item.codigo).trim() !== String(codigo).trim());
+      return reapplyPriceTables(next);
+    });
+  }, [reapplyPriceTables]);
+
+  /**
+   * ✅ Atualiza quantidade e reaplica tabela (UND total muda)
+   */
+  const updateItemQuantity = useCallback((codigo, newQuantity) => {
+    const n = Number(newQuantity);
+    if (!Number.isFinite(n) || n < 1) return;
+
+    setCartItems((prev) => {
+      const next = prev.map((item) =>
+        String(item.codigo).trim() === String(codigo).trim()
+          ? { ...item, quantidade: n }
+          : item
+      );
+      return reapplyPriceTables(next);
+    });
+  }, [reapplyPriceTables]);
+
+  const clearCart = useCallback(() => {
+    setCartItems([]);
+    setDeliveryInfo({
+      delivery_date: null,
+      route_code: '',
+      route_name: '',
+      route_cutoff: '',
+      route_city: ''
+    });
+  }, []);
+
+  const getCartMetrics = useCallback(() => {
+    const { totalValue, totalWeight, processedItems } = calculateOrderMetrics(cartItems);
+    return { totalValue, totalWeight, processedItems };
+  }, [cartItems]);
+
+  const getCartTotal = useCallback(() => {
+    const { totalValue } = calculateOrderMetrics(cartItems);
+    return totalValue || 0;
+  }, [cartItems]);
+
+  const getCartCount = useCallback(() => {
+    return cartItems.reduce((acc, item) => acc + Number(item.quantidade || 0), 0);
+  }, [cartItems]);
+
+  const contextValue = useMemo(() => ({
+    cartItems,
+    isCartOpen,
+    setIsCartOpen,
+    openCart,
+    closeCart,
+    addToCart,
+    removeFromCart,
+    updateItemQuantity,
+    clearCart,
+    getCartTotal,
+    getCartCount,
+    getCartMetrics,
+    selectedClient,
+    setSelectedClient,
+    deliveryInfo,
+    setDeliveryInfo,
+    stockUpdateTrigger,
+    notifyStockUpdate
+  }), [
+    cartItems,
+    isCartOpen,
+    selectedClient,
+    deliveryInfo,
+    stockUpdateTrigger,
+    openCart,
+    closeCart,
+    addToCart,
+    removeFromCart,
+    updateItemQuantity,
+    clearCart,
+    getCartTotal,
+    getCartCount,
+    getCartMetrics,
+    notifyStockUpdate
+  ]);
+
+  return (
+    <CartContext.Provider value={contextValue}>
+      {children}
+    </CartContext.Provider>
+  );
+};
