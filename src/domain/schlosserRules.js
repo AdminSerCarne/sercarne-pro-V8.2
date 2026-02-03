@@ -93,17 +93,31 @@ export const schlosserRules = {
   /**
    * Determines the correct price table based on quantity and user type.
    */
-  getTabelaAplicada: (qtdUND, tipoUsuario, tabelasDisponiveis) => {
-    // Default to Public Price (TAB3)
-    const publicPrice = Number(tabelasDisponiveis?.TAB3) || 0;
-    
-    // If not logged in, always public price
-    if (!tipoUsuario) {
-       return { price: publicPrice, tabName: 'TAB3' };
-    }
+ getTabelaAplicada: (qtdUND, user, tabelasDisponiveis) => {
+  const publicPrice = Number(tabelasDisponiveis?.TAB3) || 0;
 
-    let price = publicPrice;
-    let tabName = 'TAB3';
+  // Se não está logado, sempre TAB3
+  if (!user) {
+    return { price: publicPrice, tabName: 'TAB3' };
+  }
+
+  let price = publicPrice;
+  let tabName = 'TAB3';
+
+  if (qtdUND === 1 && Number(tabelasDisponiveis?.TAB1) > 0) {
+    price = Number(tabelasDisponiveis.TAB1);
+    tabName = 'TAB1';
+  } else if (qtdUND >= 2 && qtdUND <= 9 && Number(tabelasDisponiveis?.TAB0) > 0) {
+    price = Number(tabelasDisponiveis.TAB0);
+    tabName = 'TAB0';
+  } else if (qtdUND >= 10 && Number(tabelasDisponiveis?.TAB4) > 0) {
+    price = Number(tabelasDisponiveis.TAB4);
+    tabName = 'TAB4';
+  }
+
+  if (price <= 0) return { price: publicPrice, tabName: 'TAB3' };
+  return { price, tabName };
+},
 
     // B2B Rules
     if (qtdUND === 1) {
