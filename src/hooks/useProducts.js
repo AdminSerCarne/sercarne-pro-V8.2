@@ -1,90 +1,112 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { schlosserApi } from '@/services/schlosserApi';
 import { useAuth } from '@/context/AuthContext';
 import { fetchStockData } from '@/services/googleSheetsService';
+import { getAvailabilityMapForDate } from '@/utils/stockValidator';
+
+const toBool = (v) => {
+  if (v === true) return true;
+  if (v === false) return false;
+  if (v === 1 || v === '1') return true;
+  if (v === 0 || v === '0') return false;
+  const s = String(v ?? '').trim().toLowerCase();
+  return ['true', 'verdadeiro', 'sim', 'yes', 'y'].includes(s);
+};
 
 export const useProducts = () => {
   const { role } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Fetch Base Products (Names, prices, etc)
+      // 1) Base Products
       const baseProducts = await schlosserApi.getProducts(role);
-      
-      // 2. Fetch Live Stock Data (Now includes brand, species, packaging)
+
+      // 2) Stock Sheet (inclui AX, estoque_und, peso, etc)
       let stockItems = [];
       try {
-          stockItems = await fetchStockData();
+        stockItems = await fetchStockData();
       } catch (e) {
-          console.warn('Failed to load stock data, continuing with base products', e);
+        console.warn('[useProducts] Falha ao carregar stockData, seguindo só com baseProducts', e);
       }
-      
-      // Create a map for fast lookup: Code -> Stock Info
+
+      // Mapa: codigo -> stockInfo
       const stockMap = new Map();
-      stockItems.forEach(item => {
-        if (item.codigo_produto) {
-          stockMap.set(item.codigo_produto, item);
-        }
+      (stockItems || []).forEach((item) => {
+        const code = String(item.codigo_produto ?? item.codigo ?? '').trim();
+        if (code) stockMap.set(code, item);
       });
 
-      if (Array.isArray(baseProducts)) {
-        // Merge stock, weight, and new filter attributes into products
-        const mergedProducts = baseProducts.map(p => {
-             const code = p.codigo?.toString().trim();
-             const stockInfo = stockMap.get(code);
-             
-             return {
-                 ...p,
-                 // Map the specific fields requested
-                 estoque_und: stockInfo ? stockInfo.estoque_und : 0,
-                 // If we have a live weight from the sheet (Column I), use it. Otherwise fallback to base.
-                 pesoMedio: (stockInfo && stockInfo.peso_medio_kg > 0) ? stockInfo.peso_medio_kg : p.pesoMedio,
-                 // Keep the requested structure key available as well
-                 peso_medio_kg: stockInfo ? stockInfo.peso_medio_kg : p.pesoMedio,
-                 // Unit from Column AC
-                 unidade_estoque: stockInfo ? stockInfo.unidade_estoque : 'UND',
-                 
-                 // Task 3: New Filter Data from Stock Sheet
-                 marca: stockInfo ? stockInfo.marca : '',
-                 especie: stockInfo ? stockInfo.especie : '',
-                 tipo_embalagem: stockInfo ? stockInfo.tipo_embalagem : ''
-             };
-        });
-
-        // Filter by visibility (Column AX)
-        const visibleProducts = mergedProducts.filter(p => {
-             const isVisible = p.visivel === true;
-             // Keeping debug log for visibility as requested previously
-             // console.log('Produto SKU:', p.sku, 'Coluna AX:', p.ax_raw, 'Visível:', isVisible);
-             return isVisible;
-        });
-
-        // Debug logging for new filter data (Task 3)
-        if (visibleProducts.length > 0) {
-            console.log('✅ [useProducts] Dados de Filtros Carregados (Amostra):', {
-                sku: visibleProducts[0].sku,
-                marca: visibleProducts[0].marca,
-                especie: visibleProducts[0].especie,
-                tipo_embalagem: visibleProducts[0].tipo_embalagem
-            });
-        }
-        
-        setProducts(visibleProducts);
-      } else {
+      if (!Array.isArray(baseProducts)) {
         setProducts([]);
+        return;
       }
 
+      // 3) Merge
+      const mergedProducts = baseProducts.map((p) => {
+        const code = String(p.codigo ?? '').trim();
+        const stockInfo = stockMap.get(code);
+
+        // AX (coluna 50) - tentativas de nomes comuns
+        const axRaw =
+          stockInfo?.ax ??
+          stockInfo?.AX ??
+          stockInfo?.exibir_na_plataforma ??
+          stockInfo?.exibir_plataforma ??
+          stockInfo?.exibir ??
+          stockInfo?.visivel ??
+          p?.visivel;
+
+        const visivel = toBool(axRaw);
+
+        const pesoSheet = Number(stockInfo?.peso_medio_kg ?? stockInfo?.pesoMedio ?? 0);
+        const pesoMedio = pesoSheet > 0 ? pesoSheet : p.pesoMedio;
+
+        return {
+          ...p,
+          visivel, // ✅ garantia do CAP 4
+
+          // “Base” físico de hoje vindo do sheet (coluna estoque_und)
+          estoque_und: Number(stockInfo?.estoque_und ?? 0) || 0,
+
+          pesoMedio,
+          peso_medio_kg: pesoMedio,
+
+          unidade_estoque: stockInfo?.unidade_estoque || 'UND',
+
+          // Filtros extras
+          marca: stockInfo?.marca || '',
+          especie: stockInfo?.especie || '',
+          tipo_embalagem: stockInfo?.tipo_embalagem || ''
+        };
+      });
+
+      // 4) Filtra visível (CAP 4)
+      const visibleProducts = mergedProducts.filter((p) => p.visivel === true);
+
+      // 5) CAP 5: calcular disponível HOJE (Base + Entradas - Pedidos)
+      // Fazemos isso em lote (1 consulta de pedidos + entradas/base cacheadas)
+      const todayStr = new Date().toISOString().split('T')[0];
+      const codes = visibleProducts.map((p) => String(p.codigo).trim()).filter(Boolean);
+
+      const availabilityMap = await getAvailabilityMapForDate(codes, todayStr); // Map<code, available>
+
+      const withAvailability = visibleProducts.map((p) => {
+        const code = String(p.codigo).trim();
+        const available_today = availabilityMap.get(code) ?? 0;
+        return { ...p, available_today };
+      });
+
+      setProducts(withAvailability);
     } catch (err) {
       console.error('[useProducts] Error:', err);
       setError('Erro ao carregar produtos.');
-      setProducts([]); 
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -98,6 +120,6 @@ export const useProducts = () => {
     products,
     loading,
     error,
-    refreshProducts: fetchProducts,
+    refreshProducts: fetchProducts
   };
 };
