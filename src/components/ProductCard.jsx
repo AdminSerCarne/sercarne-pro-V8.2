@@ -24,7 +24,16 @@ const ProductCard = ({ product }) => {
   const [weeklyStock, setWeeklyStock] = useState([]);
 
   // Determine Pricing
-  const { price } = schlosserRules.getTabelaAplicada(quantity, user, product.prices);
+  const cartTotalUND = (cartItems || []).reduce((sum, i) => {
+  const q = Number(i.quantidade ?? i.quantity ?? 0);
+  return sum + (isNaN(q) ? 0 : q);
+}, 0);
+
+// UND total se eu adicionar este item agora
+const totalUNDIfAdd = cartTotalUND + quantity;
+
+const { price, tabName } = schlosserRules.getTabelaAplicada(totalUNDIfAdd, user, product.prices);
+
   const unit = product.unidade_estoque || 'UND';
 
   // Discount Logic
