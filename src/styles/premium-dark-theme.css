@@ -1,0 +1,122 @@
+
+/* Premium Dark Theme Variables & Utilities */
+
+:root {
+  /* Core Colors */
+  --bg-black: #000000;
+  --bg-darker: #0a0a0a;
+  --bg-dark: #121212;
+  --bg-card: #1a1a1a;
+  
+  /* Text Colors */
+  --text-white: #ffffff;
+  --text-gray: #cccccc;
+  --text-muted: #888888;
+  
+  /* Accents */
+  --accent-gold: #d4af37;
+  --accent-gold-hover: #b5952f;
+  --accent-orange: #ff6b35;
+  
+  /* Borders */
+  --border-dark: #333333;
+  --border-subtle: #222222;
+
+  /* Typography */
+  --font-serif: 'Playfair Display', serif;
+  --font-sans: 'Poppins', sans-serif;
+}
+
+/* Global Typography Overrides */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  color: var(--text-white);
+  letter-spacing: -0.02em;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-black);
+  color: var(--text-gray);
+}
+
+/* Utility Classes */
+
+.bg-premium-black {
+  background-color: var(--bg-black);
+}
+
+.bg-premium-darker {
+  background-color: var(--bg-darker);
+}
+
+.bg-premium-card {
+  background-color: var(--bg-card);
+}
+
+.text-premium-gold {
+  color: var(--accent-gold);
+}
+
+.text-premium-white {
+  color: var(--text-white);
+}
+
+.text-premium-gray {
+  color: var(--text-gray);
+}
+
+.border-premium {
+  border-color: var(--border-dark);
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
+
+/* Custom Gradients */
+.gradient-overlay {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
+}
+
+.gradient-gold-text {
+  background: linear-gradient(45deg, #d4af37, #f3e5ab, #d4af37);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 200% auto;
+  animation: shine 3s linear infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Transitions */
+.transition-premium {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

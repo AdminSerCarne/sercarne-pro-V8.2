@@ -1,0 +1,593 @@
+
+import { supabase } from '@/lib/customSupabaseClient';
+import { normalizeCity } from '@/utils/normalizeCity';
+
+const SPREADSHEET_ID = '12wPGal_n7PKYFGz9W__bXgK4mly2NbrEEGwTrIDCzcI';
+const SHEET_NAME = '2026 Base Catalogo Precifica V2';
+const CLIENTS_SHEET_NAME = 'Relacao Clientes Sysmo';
+const ROUTES_SHEET_NAME = 'Rotas Dias De Entrega';
+const CITIES_SHEET_NAME = 'Cidades';
+
+const CACHE_PREFIX = 'schlosser_cache_v30_'; 
+const CACHE_DURATION = 5 * 60 * 1000;
+const CLIENTS_CACHE_KEY = 'schlosser_clients_v3';
+const ROUTES_CACHE_KEY = 'schlosser_routes_v4_norm'; 
+const CITIES_CACHE_KEY = 'schlosser_cities_v2';
+
+export const schlosserApi = {
+  _getCache(key) {
+    try {
+      const cached = localStorage.getItem(key);
+      if (!cached) return null;
+      const { timestamp, data } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_DURATION) return data;
+      localStorage.removeItem(key);
+    } catch (e) { localStorage.removeItem(key); }
+    return null;
+  },
+
+  _setCache(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data })); } catch (e) {}
+  },
+  
+  _parseGvizResponse(text) {
+    try {
+      const startIndex = text.indexOf("({");
+      const endIndex = text.lastIndexOf("})");
+      
+      if (startIndex === -1 || endIndex === -1) {
+          const jsonString = text.substring(text.indexOf("(") + 1, text.lastIndexOf(")"));
+          return this._extractRows(JSON.parse(jsonString));
+      }
+
+      const jsonString = text.substring(startIndex + 1, endIndex + 1);
+      const json = JSON.parse(jsonString);
+      return this._extractRows(json);
+    } catch (e) {
+      console.error("[API] Error parsing Gviz response", e);
+      return [];
+    }
+  },
+
+  _extractRows(json) {
+      if (!json || json.status !== 'ok' || !json.table || !json.table.rows) return [];
+      return json.table.rows.map(row => {
+        const c = row.c;
+        return c.map(cell => (cell ? (cell.v !== null ? cell.v : '') : ''));
+      });
+  },
+
+  _processImageUrl(img) {
+      if (!img) return '';
+      const strImg = String(img);
+      if (strImg.startsWith('http')) {
+          if (strImg.includes('drive.google.com')) {
+              return `https://images.weserv.nl/?url=${encodeURIComponent(strImg)}`;
+          }
+          return strImg;
+      }
+      const match = strImg.match(/\/d\/([a-zA-Z0-9-_]+)/) || strImg.match(/id=([a-zA-Z0-9-_]+)/);
+      if (match) {
+          const driveUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+          return `https://images.weserv.nl/?url=${encodeURIComponent(driveUrl)}`;
+      }
+      return '';
+  },
+
+  async getProducts(role) {
+    const cacheKey = `${CACHE_PREFIX}products_v7_visible`; // Updated cache key
+    const cached = this._getCache(cacheKey);
+    if (cached) return cached;
+
+    // Added AX (Column 50) to the query. 
+    // Range updated to A9:AX to include the new column.
+    const query = 'SELECT D, I, V, W, X, Y, AA, AE, AF, AG, AH, AK, AL, AC, E, AX WHERE D > 0'; 
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=A9:AX&tq=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+      const text = await res.text();
+      const rows = this._parseGvizResponse(text);
+      
+      if (!Array.isArray(rows) || rows.length === 0) {
+        console.warn("[API] No products found or invalid data format");
+        return [];
+      }
+
+      const products = rows.map((row, idx) => {
+        const sku = row[0];
+        
+        if (!sku || isNaN(Number(sku)) || Number(sku) < 400000) return null;
+
+        const parseNum = (val) => {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            
+            let str = String(val).trim();
+            if (str === '') return 0;
+
+            str = str.replace('R$', '').trim();
+            if (str.includes(',') && str.includes('.')) {
+                 str = str.replace(/\./g, '').replace(',', '.');
+            } else if (str.includes(',')) {
+                 str = str.replace(',', '.');
+            }
+            
+            const num = parseFloat(str);
+            return isNaN(num) ? 0 : num;
+        };
+
+        const prices = {
+            TAB0: parseNum(row[2]), 
+            TAB5: parseNum(row[3]),
+            TAB4: parseNum(row[4]), 
+            TAB1: parseNum(row[5]), 
+            TAB3: parseNum(row[6]), 
+        };
+
+        const weight = parseNum(row[1]);
+
+        let img = '';
+        let isBrandImage = false;
+        if (row[7]) img = row[7]; 
+        else if (row[8]) img = row[8]; 
+        else if (row[9]) img = row[9]; 
+        else if (row[10]) { img = row[10]; isBrandImage = true; }
+
+        const cleanStr = (val) => {
+            if (!val) return '';
+            const s = String(val).trim();
+            if (['#N/A', '#N/A!', '#REF!', '#VALUE!', '#NAME?', 'N/A'].includes(s)) return '';
+            return s;
+        };
+
+        const descAK = cleanStr(row[11]);
+        const descAL = cleanStr(row[12]);
+        const descE = cleanStr(row[14]);
+
+        const desc = descAK || descAL || descE || 'Produto sem descrição';
+        
+        let descComplementar = descAL;
+        if (desc === descAL) {
+            descComplementar = ''; 
+        }
+
+        // Visibility Logic (Column AX is index 15)
+        const axValue = row[15];
+        let isVisible = false;
+        if (axValue === true) {
+            isVisible = true;
+        } else if (typeof axValue === 'string') {
+            const up = axValue.toUpperCase().trim();
+            if (up === 'TRUE' || up === 'VERDADEIRO') isVisible = true;
+        }
+
+        return {
+          id: `${sku}-${idx}`, 
+          codigo: sku,
+          sku: sku,
+          descricao: desc,
+          descricao_complementar: descComplementar,
+          descricaoTecnica: descComplementar,
+          peso: parseFloat(weight),
+          pesoMedio: parseFloat(weight),
+          prices: prices,
+          imagem: this._processImageUrl(img),
+          isBrandImage: isBrandImage,
+          tipoVenda: String(row[13] || 'UND').toUpperCase(),
+          visivel: isVisible,
+          ax_raw: axValue // Passed for debugging
+        };
+      }).filter(Boolean);
+
+      this._setCache(cacheKey, products);
+      return products;
+    } catch (e) {
+      console.error('[API] Products fetch error', e);
+      return [];
+    }
+  },
+
+  async getCities() {
+    try {
+        const routes = await this.getRoutes();
+        if (routes && routes.length > 0) {
+            const uniqueCities = [...new Set(routes.map(r => r.municipio).filter(Boolean))];
+            return uniqueCities.map(c => ({ nome: c, ativo: true })).sort((a,b) => a.nome.localeCompare(b.nome));
+        }
+    } catch (e) {
+        console.warn("Using fallback city list logic due to route fetch error", e);
+    }
+
+    const cached = this._getCache(CITIES_CACHE_KEY);
+    if (cached) return cached;
+
+    const query = 'SELECT A'; 
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CITIES_SHEET_NAME)}&tq=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+      const text = await res.text();
+      const rows = this._parseGvizResponse(text);
+      
+      if (!Array.isArray(rows) || rows.length === 0) return [];
+
+      const cities = rows
+        .map(row => {
+          const name = row[0];
+          if (!name || typeof name !== 'string' || name.toLowerCase() === 'cidade') return null;
+          return { nome: normalizeCity(name), ativo: true }; // Normalize here
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+
+      this._setCache(CITIES_CACHE_KEY, cities);
+      return cities;
+    } catch (e) {
+      console.error('[API] Cities fetch error', e);
+      return [];
+    }
+  },
+
+  async getClients() {
+      const cached = this._getCache(CLIENTS_CACHE_KEY);
+      if (cached) return cached;
+      
+      const query = 'SELECT A, B, C, D, E, F'; 
+      const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CLIENTS_SHEET_NAME)}&tq=${encodeURIComponent(query)}`;
+
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        const rows = this._parseGvizResponse(text);
+        
+        const clients = rows.map((row, i) => {
+            if (i === 0 && (row[0] === 'Código' || row[0] === 'Codigo')) return null;
+            if (!row[0]) return null;
+
+            return {
+                id: String(row[0]),
+                razaoSocial: row[1] || '',
+                nomeFantasia: row[2] || row[1] || 'Cliente Sem Nome',
+                cnpj: row[3] ? String(row[3]).replace(/\D/g, '') : '',
+                municipio: normalizeCity(row[4] || ''), // Normalize city
+                cidade: normalizeCity(row[4] || ''), // Alias
+                bairro: row[5] || ''
+            };
+        }).filter(Boolean);
+
+        this._setCache(CLIENTS_CACHE_KEY, clients);
+        return clients;
+      } catch(e) { 
+        console.error('[API] Clients fetch error', e);
+        return []; 
+      }
+  },
+
+  async getRoutes() {
+      const cached = this._getCache(ROUTES_CACHE_KEY);
+      if (cached) return cached;
+
+      const query = 'SELECT A, B, C, D, F'; 
+      const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(ROUTES_SHEET_NAME)}&tq=${encodeURIComponent(query)}`;
+
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        const rows = this._parseGvizResponse(text);
+        
+        const routes = rows.map((row, i) => {
+             if (i === 0 && (row[0] === 'DESCRICAO DO GRUPO (ROTA)' || row[1] === 'MUNICIPIOS')) return null;
+             
+             if (!row[1] || !row[0]) return null;
+
+             return {
+                 municipio: normalizeCity(row[1]), // Normalize route city
+                 descricao_grupo_rota: row[0] || '',
+                 dias_entrega: row[2] || '',
+                 corte_ate: row[3] || '17:00',
+                 codigo_cidade: row[4] || ''
+             };
+        }).filter(Boolean);
+
+        this._setCache(ROUTES_CACHE_KEY, routes);
+        return routes;
+      } catch(e) {
+          console.error('[API] Routes fetch error', e);
+          return [];
+      }
+  },
+
+  async saveOrderToSupabase(orderData) {
+    const required = [
+      'vendor_id', 
+      'client_id', 
+      'route_name', 
+      'delivery_date', 
+      'items', 
+      'total_value'
+    ];
+    
+    const missing = required.filter(field => !orderData[field]);
+    if (missing.length > 0) {
+      console.warn(`[Supabase] Campos faltando: ${missing.join(', ')}`);
+    }
+
+    const payload = {
+      vendor_id: orderData.vendor_id,
+      vendor_name: orderData.vendor_name,
+      client_id: orderData.client_id,
+      client_name: orderData.client_name,
+      client_cnpj: orderData.client_cnpj,
+      route_id: orderData.route_id,
+      route_name: orderData.route_name,
+      delivery_date: orderData.delivery_date,
+      delivery_city: orderData.delivery_city,
+      cutoff: orderData.cutoff,
+      items: orderData.items,
+      total_value: orderData.total_value,
+      total_weight: orderData.total_weight,
+      observations: orderData.observations,
+      status: orderData.status || 'PENDENTE'
+    };
+
+    const { data, error } = await supabase
+      .from('pedidos')
+      .insert([payload])
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[Supabase] Insert error:', error);
+      throw new Error(`Erro ao salvar no banco: ${error.message}`);
+    }
+
+    return data.id;
+  },
+
+  // --- STOCK FUNCTIONS WITH IMPROVED DEBUGGING ---
+
+  async getStockByProduct(codigo) {
+      const targetCode = String(codigo).trim();
+      console.log('🔍 getStockByProduct START', { codigo: targetCode, tipo: typeof codigo });
+      console.log('📋 Query params:', { codigo: targetCode });
+
+      // Try finding by exact string match
+      const { data, error } = await supabase
+          .from('entradas_estoque')
+          .select('codigo, qtd_und, data_entrada')
+          .eq('codigo', targetCode)
+          .order('data_entrada', { ascending: true });
+
+      if (error) {
+          console.log('❌ getStockByProduct ERROR', { error: error?.message, errorCode: error?.code });
+          console.error('[schlosserApi] Error fetching stock entries:', error);
+          return [];
+      }
+      
+      console.log('✅ getStockByProduct SUCCESS', { data, rowCount: data?.length });
+
+      if (!data || data.length === 0) {
+          console.log(`[schlosserApi] No entries found for string "${targetCode}".`);
+          // Note: In some cases, numbers in Supabase might be queried as numbers. 
+          // But our constraint is 'text' column for codigo usually. 
+      } else {
+          const totalStock = data.reduce((a,b)=>a+(b.qtd_und||0),0);
+          console.log(`[schlosserApi] Found ${data.length} stock entries. Total: ${totalStock}`);
+          // console.log('[schlosserApi] First entry sample:', data[0]);
+      }
+
+      return data || [];
+  },
+
+  async getOrdersByProduct(sku) {
+    const targetSku = String(sku).trim();
+    console.log('🔍 getOrdersByProduct START', { sku: targetSku, tipo: typeof sku });
+    console.log('📋 Query params:', { sku: targetSku });
+
+    // Fetch ALL confirmed orders first.
+    // This bypasses potential JSONB query issues in PostgREST and ensures we see the raw data.
+    const { data, error } = await supabase
+        .from('pedidos')
+        .select('id, delivery_date, items, status')
+        .eq('status', 'CONFIRMADO');
+
+    if (error) {
+        console.log('❌ getOrdersByProduct ERROR', { error: error?.message, errorCode: error?.code });
+        console.error('[schlosserApi] Error fetching orders:', error);
+        return { totalQuantity: 0, orders: [] };
+    }
+
+    console.log('✅ getOrdersByProduct SUCCESS', { data, rowCount: data?.length });
+
+    // console.log(`[schlosserApi] Raw query returned ${data?.length || 0} CONFIRMED orders. Filtering for SKU "${targetSku}"...`);
+
+    const matchingOrders = [];
+    let totalQty = 0;
+
+    if (data && data.length > 0) {
+        data.forEach(order => {
+            let items = order.items;
+            
+            // Robust JSON parsing
+            if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch(e) { 
+                    console.error(`[schlosserApi] JSON parse error for order ${order.id}:`, e); 
+                    items = []; 
+                }
+            }
+
+            if (Array.isArray(items)) {
+                items.forEach(item => {
+                    // Check likely field names for SKU
+                    const itemCode = String(item.codigo || item.sku || item.id || '').trim();
+                    
+                    if (itemCode === targetSku) {
+                        const qty = Number(item.quantity_unit || item.quantity || item.qtd || 0);
+                        // console.log(`[schlosserApi] Found match in order ${order.id}: ${qty} units (Date: ${order.delivery_date})`);
+                        totalQty += qty;
+                        matchingOrders.push({
+                            delivery_date: order.delivery_date,
+                            quantity_unit: qty,
+                            sku: targetSku,
+                            original_item: item
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    console.log(`[schlosserApi] Summary for SKU ${targetSku}: Found ${matchingOrders.length} orders, Total Reserved Qty: ${totalQty}`);
+    return { totalQuantity: totalQty, orders: matchingOrders };
+  },
+
+  async calculateAvailableStock(codigo, deliveryDate) {
+      console.log(`[schlosserApi] calculateAvailableStock for SKU: ${codigo}, Date: ${deliveryDate}`);
+      
+      // 1. Get Incoming Stock
+      const incomingStock = await this.getStockByProduct(codigo);
+      const targetDate = new Date(deliveryDate);
+      targetDate.setHours(23, 59, 59, 999);
+      const targetDateStr = targetDate.toISOString().split('T')[0];
+
+      const entradas_total = incomingStock.reduce((acc, entry) => {
+          const entryDate = new Date(entry.data_entrada);
+          const entryDateStr = entryDate.toISOString().split('T')[0];
+          
+          if (entryDateStr <= targetDateStr) {
+              return acc + (Number(entry.qtd_und) || 0);
+          }
+          return acc;
+      }, 0);
+
+      // 2. Get Confirmed Orders
+      const { orders: allOrders } = await this.getOrdersByProduct(codigo);
+      
+      const pedidos_total = allOrders.reduce((acc, order) => {
+          const orderDate = new Date(order.delivery_date);
+          const orderDateStr = orderDate.toISOString().split('T')[0];
+
+          if (orderDateStr <= targetDateStr) {
+              return acc + (Number(order.quantity_unit) || 0);
+          }
+          return acc;
+      }, 0);
+
+      // 3. Base Stock (Mocked as 0 if not available)
+      const estoque_total = 0; 
+
+      const available = estoque_total + entradas_total - pedidos_total;
+
+      console.log(`[schlosserApi] STOCK CALCULATION BREAKDOWN:`);
+      console.log(`[schlosserApi] > Base Stock: ${estoque_total}`);
+      console.log(`[schlosserApi] > Entries (<= ${targetDateStr}): ${entradas_total}`);
+      console.log(`[schlosserApi] > Confirmed Orders (<= ${targetDateStr}): ${pedidos_total}`);
+      console.log(`[schlosserApi] > Final Available: ${available}`);
+
+      return {
+          codigo,
+          deliveryDate,
+          totalStock: entradas_total, // Using entries as proxy for total stock
+          confirmedOrders: pedidos_total,
+          availableStock: Math.max(0, available)
+      };
+  },
+
+  async getIncomingStock() {
+     return [];
+  },
+  
+  async getProductQuantities() { return this.getProducts(); }
+};
+
+// --- NEW DEBUG FUNCTIONS ---
+
+export const debugSupabaseData = async () => {
+  console.log('🐞 STARTING FULL SUPABASE DEBUG...');
+  const results = {};
+  
+  // 1. Entradas Estoque
+  try {
+    const { data, error } = await supabase.from('entradas_estoque').select('*');
+    if (error) throw error;
+    console.log('📊 ENTRADAS_ESTOQUE RAW DATA:', {
+      count: data?.length,
+      sample: data?.[0],
+      all: data
+    });
+    results.entradas_estoque = data;
+  } catch (e) {
+    console.error('❌ ENTRADAS_ESTOQUE ERROR:', e);
+    results.entradas_error = e;
+  }
+
+  // 2. Pedidos
+  try {
+    const { data, error } = await supabase.from('pedidos').select('*');
+    if (error) throw error;
+    console.log('📦 PEDIDOS RAW DATA:', {
+      count: data?.length,
+      sample: data?.[0],
+      all: data
+    });
+    results.pedidos = data;
+  } catch (e) {
+    console.error('❌ PEDIDOS ERROR:', e);
+    results.pedidos_error = e;
+  }
+  
+  return results;
+};
+
+export const checkRLSPolicies = async () => {
+  console.log('🛡️ CHECKING RLS POLICIES...');
+  const report = {};
+
+  // Check Entradas Public Access
+  const { data: eData, error: eError } = await supabase.from('entradas_estoque').select('id').limit(1);
+  report.entradas_public_read = !eError;
+  console.log(`Entradas Public Read: ${!eError ? '✅ OK' : '❌ BLOCKED'}`, eError || '');
+
+  // Check Pedidos Public Access
+  const { data: pData, error: pError } = await supabase.from('pedidos').select('id').limit(1);
+  report.pedidos_public_read = !pError;
+  console.log(`Pedidos Public Read: ${!pError ? '✅ OK' : '❌ BLOCKED'}`, pError || '');
+  
+  return report;
+};
+
+// Expose test function to window for browser console debugging
+if (typeof window !== 'undefined') {
+  window.testStockCalculation = async (sku, date) => {
+    console.clear();
+    console.log("%c --- START MANUAL STOCK TEST ---", "background: #222; color: #bada55; padding: 4px; border-radius: 4px;");
+    console.log(`Testing SKU: ${sku}, Delivery Date: ${date}`);
+    
+    console.group("1. Checking Orders");
+    const orders = await schlosserApi.getOrdersByProduct(sku);
+    console.log("Orders Result:", orders);
+    console.groupEnd();
+
+    console.group("2. Checking Stock Entries");
+    const stock = await schlosserApi.getStockByProduct(sku);
+    console.log("Stock Entries:", stock);
+    console.groupEnd();
+
+    console.group("3. Calculating Availability");
+    const avail = await schlosserApi.calculateAvailableStock(sku, date);
+    console.log("Calculation Result:", avail);
+    console.groupEnd();
+    
+    console.log("%c --- END MANUAL STOCK TEST ---", "background: #222; color: #bada55; padding: 4px; border-radius: 4px;");
+    return avail;
+  };
+
+  // Expose new debug helpers
+  window.schlosserDebug = {
+      debugSupabaseData,
+      checkRLSPolicies
+  };
+}
