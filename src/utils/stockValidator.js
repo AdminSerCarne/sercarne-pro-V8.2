@@ -29,45 +29,57 @@ const getEntriesData = async () => {
     return data;
 };
 
-const getConfirmedOrders = async (productCode, targetDateStr) => {
-    console.log(`[StockValidator] Fetching confirmed orders for ${productCode} until ${targetDateStr}`);
-    const { data, error } = await supabase
-        .from('pedidos')
-        .select('id, items, delivery_date, status')
-        .eq('status', 'CONFIRMADO') 
-        .lte('delivery_date', targetDateStr); 
+const getCommittedOrders = async (productCode, targetDateStr) => {
+  console.log(`[StockValidator] Fetching committed orders for ${productCode} until ${targetDateStr}`);
 
-    if (error) {
-        console.error('[StockValidator] Error fetching pedidos:', error);
-        return { total: 0 };
+  // ✅ Compatível com legado e Manual V8
+  const COMMIT_STATUSES = [
+    'PEDIDO ENVIADO',
+    'PEDIDO CONFIRMADO',
+    'SEU PEDIDO SAIU PARA ENTREGA',
+
+    // legados possíveis:
+    'CONFIRMADO',
+    'ENVIADO',
+    'SAIU PARA ENTREGA'
+  ];
+
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select('id, items, delivery_date, status')
+    .in('status', COMMIT_STATUSES)
+    .lte('delivery_date', targetDateStr);
+
+  if (error) {
+    console.error('[StockValidator] Error fetching pedidos:', error);
+    return { total: 0 };
+  }
+
+  let totalQty = 0;
+  const safeCode = String(productCode).trim();
+
+  (data || []).forEach(order => {
+    let items = order.items;
+
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items); } catch (e) { items = []; }
     }
 
-    let totalQty = 0;
-    const safeCode = String(productCode).trim();
+    if (Array.isArray(items)) {
+      items.forEach(item => {
+        const itemCode = String(item.codigo || item.id || item.sku || '').trim();
+        if (itemCode === safeCode) {
+          const qty = parseInt(item.quantidade || item.quantity || item.quantity_unit || 0);
+          if (!isNaN(qty)) totalQty += qty;
+        }
+      });
+    }
+  });
 
-    data.forEach(order => {
-        let items = order.items;
-        
-        if (typeof items === 'string') {
-            try { items = JSON.parse(items); } catch(e) { items = []; }
-        }
-        
-        if (Array.isArray(items)) {
-            items.forEach(item => {
-                const itemCode = String(item.codigo || item.id || item.sku || '').trim();
-                if (itemCode === safeCode) {
-                    const qty = parseInt(item.quantidade || item.quantity || item.quantity_unit || 0);
-                    if (!isNaN(qty)) {
-                        totalQty += qty;
-                    }
-                }
-            });
-        }
-    });
-    
-    console.log(`[StockValidator] Found total ${totalQty} confirmed units for ${productCode}`);
-    return { total: totalQty };
+  console.log(`[StockValidator] Found total ${totalQty} committed units for ${productCode}`);
+  return { total: totalQty };
 };
+
 
 export const getStockBreakdown = async (productCode, date) => {
     const safeCode = String(productCode).trim();
@@ -89,7 +101,7 @@ export const getStockBreakdown = async (productCode, date) => {
     console.log(`Entries (Sheet) <= Date: ${entriesUntilDate}`);
 
     // 3. Confirmed Orders (Up to Target Date)
-    const { total: pedidosTotal } = await getConfirmedOrders(safeCode, targetDateStr);
+    const { total: pedidosTotal } = await getCommittedOrders(safeCode, targetDateStr);
     console.log(`Confirmed Orders (DB) <= Date: ${pedidosTotal}`);
 
     // 4. Calculate Formula: Disponivel = Base + Entradas - Pedidos
