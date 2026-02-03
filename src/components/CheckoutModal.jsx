@@ -1,6 +1,24 @@
 import React, { useState } from 'react';
-import { CheckCircle, Loader2, AlertTriangle, Truck, CalendarCheck, Clock, Package, RefreshCw } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  CheckCircle,
+  Loader2,
+  AlertTriangle,
+  Truck,
+  CalendarCheck,
+  Clock,
+  Package,
+  RefreshCw
+} from 'lucide-react';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
+
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/context/CartContext';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
@@ -26,10 +44,11 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
   const { processedItems, totalWeight, totalValue } = calculateOrderMetrics(cartItems);
 
-  const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatMoney = (val) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  // ✅ Helper: pega a data de entrega real (aceita delivery_date ou date)
-  const getDeliveryDateStr = () => {
+  // ✅ Helper: garante YYYY-MM-DD (Date ou string)
+  const getDeliveryDateISO = () => {
     const raw = deliveryInfo?.delivery_date || deliveryInfo?.date || deliveryInfo?.deliveryDate;
     if (!raw) return null;
 
@@ -50,48 +69,31 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
     return null;
   };
 
+  // ✅ CAP 9: validação final antes de enviar (estoque pode mudar)
   const performFinalValidation = async () => {
     setValidating(true);
     setValidationErrors([]);
     const errors = [];
 
     try {
-      const dateStr = getDeliveryDateStr();
-
+      const dateStr = getDeliveryDateISO();
       if (!dateStr) {
         errors.push("Data de entrega não definida.");
       } else {
-        // ✅ Validação em paralelo e com código normalizado
-        const results = await Promise.all(
-          processedItems.map(async (item) => {
-            const codigo = String(item.codigo ?? item.sku ?? '').trim();
-            const desired = Number(item.quantity ?? 0);
+        for (const item of processedItems) {
+          const code = String(item.codigo ?? item.sku ?? '').trim();
+          const desiredQty = Number(item.quantity ?? item.quantidade ?? item.quantity_unit ?? 0);
 
-            if (!codigo) {
-              return { ok: false, msg: `Item inválido: código não encontrado.` };
-            }
-            if (!desired || desired <= 0) {
-              return { ok: false, msg: `${item.name || codigo}: quantidade inválida.` };
-            }
+          const available = await calcularEstoqueData(code, dateStr);
 
-            const available = await calcularEstoqueData(codigo, dateStr);
+          console.log(
+            `[CheckoutValidation] SKU ${code}: Desired ${desiredQty} vs Available ${available} @ ${dateStr}`
+          );
 
-            console.log(`[CheckoutValidation] Item ${codigo}: Desired ${desired} vs Available ${available} @ ${dateStr}`);
-
-            if (available < desired) {
-              return {
-                ok: false,
-                msg: `${item.name || codigo}: Estoque insuficiente para ${dateStr} (${available} disponíveis).`
-              };
-            }
-
-            return { ok: true };
-          })
-        );
-
-        results.forEach(r => {
-          if (!r.ok && r.msg) errors.push(r.msg);
-        });
+          if (available < desiredQty) {
+            errors.push(`${item.name}: Estoque insuficiente para ${dateStr} (${available} disponíveis).`);
+          }
+        }
       }
     } catch (e) {
       console.error("Validation error:", e);
@@ -104,7 +106,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   };
 
   const handleConfirm = async () => {
-    // 1) Last second stock validation
+    // 1) validação final (CAP 9)
     const isValid = await performFinalValidation();
     if (!isValid) {
       toast({
@@ -117,58 +119,55 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
     setLoading(true);
 
-    let createdOrderId = null;
-
     try {
+      // Guardrails
       if (!user?.id) throw new Error("Usuário não identificado. Faça login novamente.");
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
-      if (cartItems.length === 0) throw new Error("Carrinho vazio.");
+      if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
 
-      const deliveryDateISO = getDeliveryDateStr();
-      if (!deliveryDateISO) throw new Error("Data de entrega não definida.");
+      const deliveryDateISO = getDeliveryDateISO();
+      if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
-      // Debug
-      console.log("[Checkout] User:", user.id);
-      console.log("[Checkout] Processed Items:", processedItems);
-
-      // ✅ Payload correto (garantir serializável e com sku/codigo certo)
+      // 2) payload itens (serializável)
       const itemsPayload = processedItems.map(item => ({
-        sku: String(item.codigo ?? item.sku ?? '').trim(),
+        sku: item.codigo ?? item.sku,
         name: item.name,
-        quantity_unit: item.quantity,
-        unit_type: item.unitType,
-        quantity_kg: item.estimatedWeight,
-        price_per_kg: item.pricePerKg,
-        total: item.estimatedValue
+        quantity_unit: item.quantity,     // UND
+        unit_type: item.unitType,         // UND
+        quantity_kg: item.estimatedWeight, // estimativo
+        price_per_kg: item.pricePerKg,     // R$/KG
+        total: item.estimatedValue         // UND × peso × preço
       }));
 
-      // 🔒 Segurança extra: não permitir sku vazio
-      if (itemsPayload.some(i => !i.sku)) {
-        throw new Error("Falha interna: item sem SKU/código. Recarregue o catálogo e tente novamente.");
-      }
-
+      // ✅ CAP 10: status oficial inicial
       const orderData = {
         vendor_id: user.id || user.login || 'unknown',
         vendor_name: user.usuario || 'Vendedor',
+
         client_id: selectedClient.cnpj,
         client_name: selectedClient.nomeFantasia,
         client_cnpj: selectedClient.cnpj,
+
         route_id: deliveryInfo?.route_code?.toString(),
         route_name: deliveryInfo?.route_name,
         delivery_date: deliveryDateISO,
-        delivery_city: deliveryInfo?.route_city || selectedClient.municipio,
+        delivery_city: deliveryInfo?.route_city || selectedClient?.municipio,
         cutoff: deliveryInfo?.route_cutoff,
+
         items: itemsPayload,
         total_value: totalValue,
         total_weight: totalWeight,
+
         observations: obs,
-        status: 'PENDENTE',
+
+        // ✅ MANUAL V8.2
+        status: 'PEDIDO ENVIADO',
         created_at: new Date().toISOString()
       };
 
       console.log("[Checkout] Inserting Order:", orderData);
 
-      // 2) Cria pedido
+      // 3) inserir pedido em pedidos
       const { data: orderResult, error: orderError } = await supabase
         .from('pedidos')
         .insert([orderData])
@@ -180,72 +179,45 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         throw new Error(`Falha ao criar pedido: ${orderError.message}`);
       }
 
-      createdOrderId = orderResult?.id;
       console.log("[Checkout] Order Created Success:", orderResult);
 
-      // 3) Cria “reservas/comprometido” (status CONFIRMADO, sem RESERVADO)
-      const reservations = processedItems.map(item => ({
-        codigo: String(item.codigo ?? item.sku ?? '').trim(), // ✅ corrigido
-        qnd_reservada: item.quantity,
-        data_reserva: new Date(deliveryDateISO).toISOString(),
-        cliente: selectedClient.cnpj,
-        status: 'CONFIRMADO',
-        observacoes: `Pedido #${String(createdOrderId || '').slice(0, 8) || 'N/A'} - ${user.usuario || ''}`
-      }));
-
-      console.log("[Checkout] Inserting Reservations:", reservations);
-
-      const { error: reservationError } = await supabase
-        .from('reservas')
-        .insert(reservations);
-
-      if (reservationError) {
-        console.error("[Checkout] Reservation Error:", reservationError);
-
-        // ✅ tentativa de rollback do pedido para não ficar “zumbi”
-        try {
-          if (createdOrderId) {
-            await supabase.from('pedidos').delete().eq('id', createdOrderId);
-            console.warn("[Checkout] Rollback OK: pedido removido por falha de reserva.");
-          }
-        } catch (rbErr) {
-          console.warn("[Checkout] Rollback falhou (RLS/perm):", rbErr);
-        }
-
-        throw new Error("Falha ao reservar estoque. Pedido não foi finalizado.");
-      }
-
-      console.log("[Checkout] Reservations Created Success");
+      // ✅ CAP 2: NÃO EXISTE RESERVA
+      // -> Não inserir em "reservas"
+      // -> Compromisso é o próprio pedido (status comprometido já conta no stockValidator)
 
       // 4) Sync externo (fail-safe)
       try {
         await schlosserApi.saveOrderToSheets(orderData, user.usuario);
       } catch (sheetErr) {
-        console.warn("Sheet sync failed", sheetErr);
+        console.warn("[Checkout] Sheet sync failed (fail-safe):", sheetErr);
       }
 
       toast({
-        title: "Sucesso!",
-        description: "Pedido confirmado e enviado para processamento.",
+        title: "Sucesso! ✅",
+        description: "Pedido enviado e registrado com sucesso.",
         className: "bg-green-50 border-green-200 text-green-900"
       });
 
+      // 5) Atualizar stock displays no app
       notifyStockUpdate();
+
+      // 6) Limpar carrinho e fechar
       clearCart();
       onClose();
       navigate('/vendedor');
-
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
       toast({
         title: "Erro ao confirmar pedido",
-        description: error.message || "Verifique sua conexão e tente novamente.",
+        description: error?.message || "Verifique sua conexão e tente novamente.",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
+
+  const deliveryDateForCard = deliveryInfo?.delivery_date ? new Date(deliveryInfo.delivery_date) : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !loading && onClose(open)}>
@@ -290,26 +262,28 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
           )}
 
           {/* Logistics Card */}
-          {selectedClient && getDeliveryDateStr() && (
+          {selectedClient && deliveryInfo?.delivery_date && (
             <div className="bg-[#FFF5EB] border border-orange-100 rounded-lg overflow-hidden shadow-sm">
               <div className="bg-orange-50 px-4 py-2 border-b border-orange-100 flex justify-between items-center">
                 <h3 className="text-xs font-bold text-orange-700 uppercase tracking-wider flex items-center gap-1">
                   <Truck size={12} /> Logística de Entrega
                 </h3>
               </div>
+
               <div className="p-4 space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="flex flex-col items-center justify-center p-2.5 bg-white text-orange-600 rounded-lg border border-orange-100 min-w-[70px] shadow-sm">
                     <span className="text-[10px] font-bold uppercase text-gray-400">
-                      {format(new Date(getDeliveryDateStr()), 'EEE', { locale: ptBR })}
+                      {deliveryDateForCard ? format(deliveryDateForCard, 'EEE', { locale: ptBR }) : '--'}
                     </span>
                     <span className="text-2xl font-bold leading-none">
-                      {format(new Date(getDeliveryDateStr()), 'd')}
+                      {deliveryDateForCard ? format(deliveryDateForCard, 'd') : '--'}
                     </span>
                     <span className="text-[10px] uppercase font-bold">
-                      {format(new Date(getDeliveryDateStr()), 'MMM', { locale: ptBR })}
+                      {deliveryDateForCard ? format(deliveryDateForCard, 'MMM', { locale: ptBR }) : '--'}
                     </span>
                   </div>
+
                   <div className="space-y-1 pt-1">
                     <p className="text-sm font-bold text-gray-800 leading-tight">
                       {deliveryInfo?.route_name}
@@ -320,6 +294,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
                       </span>
                     </div>
                   </div>
+
                 </div>
               </div>
             </div>
@@ -330,16 +305,21 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
               <Package size={12} /> Resumo dos Itens ({processedItems.length})
             </h4>
+
             <div className="border rounded-lg overflow-hidden border-gray-100">
               <div className="max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200">
                 {processedItems.map((item, idx) => (
-                  <div key={idx} className="flex flex-col text-sm bg-white p-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
+                  <div
+                    key={idx}
+                    className="flex flex-col text-sm bg-white p-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50"
+                  >
                     <div className="flex justify-between items-start gap-2">
                       <span className="font-medium text-gray-700 leading-snug">{item.name}</span>
                       <span className="font-bold text-gray-900 whitespace-nowrap">
                         {item.formattedValue}
                       </span>
                     </div>
+
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 rounded border border-gray-100">
                         {item.quantity} {item.unitType}
@@ -356,7 +336,9 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
           {/* Observation Input */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">Observações do Pedido</label>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">
+              Observações do Pedido
+            </label>
             <textarea
               className="w-full text-sm border border-gray-200 rounded-md p-2 h-20 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none bg-white placeholder:text-gray-300"
               placeholder="Ex: Entregar na porta dos fundos, ligar antes..."
@@ -365,6 +347,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
               disabled={loading}
             />
           </div>
+
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2 pt-2 mt-2 border-t border-gray-100">
@@ -374,6 +357,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
               {formatMoney(totalValue)}
             </span>
           </div>
+
           <div className="flex gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
@@ -383,10 +367,17 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             >
               Cancelar
             </Button>
+
             <Button
               onClick={handleConfirm}
               className="bg-[#FF8C42] hover:bg-[#E67E22] text-white flex-1 sm:flex-none min-w-[140px]"
-              disabled={loading || validating || !selectedClient || !getDeliveryDateStr() || validationErrors.length > 0}
+              disabled={
+                loading ||
+                validating ||
+                !selectedClient ||
+                !deliveryInfo?.delivery_date ||
+                validationErrors.length > 0
+              }
             >
               {loading || validating
                 ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
