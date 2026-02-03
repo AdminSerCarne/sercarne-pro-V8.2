@@ -115,36 +115,10 @@ export const schlosserRules = {
     tabName = 'TAB4';
   }
 
+  // fallback
   if (price <= 0) return { price: publicPrice, tabName: 'TAB3' };
   return { price, tabName };
 },
-
-    // B2B Rules
-    if (qtdUND === 1) {
-       if (tabelasDisponiveis?.TAB1 > 0) {
-          price = Number(tabelasDisponiveis.TAB1);
-          tabName = 'TAB1';
-       }
-    } else if (qtdUND >= 2 && qtdUND <= 9) {
-       if (tabelasDisponiveis?.TAB0 > 0) {
-          price = Number(tabelasDisponiveis.TAB0);
-          tabName = 'TAB0';
-       }
-    } else if (qtdUND >= 10) {
-       if (tabelasDisponiveis?.TAB4 > 0) {
-          price = Number(tabelasDisponiveis.TAB4);
-          tabName = 'TAB4';
-       }
-    }
-
-    // Fallback if specific table price is 0/invalid, use public price
-    if (price <= 0) {
-        price = publicPrice;
-        tabName = 'TAB3';
-    }
-
-    return { price, tabName };
-  },
 
   formatarCalculo: (und, pesoMedio, precoKg) => {
     const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(precoKg || 0);
