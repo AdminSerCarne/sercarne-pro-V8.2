@@ -1,7 +1,6 @@
 export const calculateWeight = (qtd, peso_medio) => {
   const q = parseFloat(qtd);
   const p = parseFloat(peso_medio);
-
   if (!Number.isFinite(q) || !Number.isFinite(p)) return 0;
   return q * p;
 };
@@ -9,13 +8,11 @@ export const calculateWeight = (qtd, peso_medio) => {
 export const calculateSubtotal = (qtd, preco_kg, peso_medio) => {
   const weight = calculateWeight(qtd, peso_medio);
   const price = parseFloat(preco_kg);
-
   if (!Number.isFinite(weight) || !Number.isFinite(price)) return 0;
   return weight * price;
 };
 
 export const calculateOrderMetrics = (items) => {
-  // ✅ desliga logs por padrão (evita console infinito e lentidão)
   const DEBUG_METRICS = false;
 
   let totalWeight = 0;
@@ -24,33 +21,29 @@ export const calculateOrderMetrics = (items) => {
   const safeItems = Array.isArray(items) ? items : [];
 
   const processedItems = safeItems.map((item) => {
-    // 1) ✅ Normalize Quantity (aceita todos os formatos do app)
+    // 1) Quantity
     const quantity = Number(
       item.quantity_unit ??
-        item.quantity ??
-        item.quantidade ??
-        item.qtd ??
-        0
+      item.quantity ??
+      item.quantidade ??
+      item.qtd ??
+      0
     );
 
-    // 2) ✅ Price Per Kg (prioridade: price -> preco -> price_per_kg)
-    const rawPrice =
-      item.price ?? item.preco ?? item.price_per_kg ?? 0;
-
+    // 2) Price per Kg
+    const rawPrice = item.price ?? item.preco ?? item.price_per_kg ?? 0;
     let pricePerKg = parseFloat(rawPrice);
     if (!Number.isFinite(pricePerKg) || pricePerKg < 0) pricePerKg = 0;
 
-    // 3) ✅ Average Weight (prioridade: peso -> pesoMedio -> peso_medio_kg)
-    const rawWeight =
-      item.peso ?? item.pesoMedio ?? item.peso_medio_kg ?? 0;
-
+    // 3) Average weight
+    const rawWeight = item.peso ?? item.pesoMedio ?? item.peso_medio_kg ?? 0;
     let averageWeight = parseFloat(rawWeight);
     if (!Number.isFinite(averageWeight) || averageWeight < 0) averageWeight = 0;
 
     const name = item.name || item.descricao || 'Produto sem nome';
     const sku = item.sku || item.codigo || '';
 
-    // 4) ✅ Unit Type (aceita: unitType, unidade_estoque, unit_type, tipoVenda)
+    // 4) Unit type
     let unitType =
       item.unitType ??
       item.unidade_estoque ??
@@ -59,32 +52,27 @@ export const calculateOrderMetrics = (items) => {
       '';
 
     if (!unitType) {
-      // fallback antigo: SKU >= 410000 => CX, senão UND
       const numericSku = Number(sku);
       if (!isNaN(numericSku) && numericSku >= 410000) unitType = 'CX';
       else unitType = 'UND';
     }
-
     unitType = String(unitType).toUpperCase();
 
-    // 5) ✅ Estimated Weight
+    // 5) Estimated weight
     let estimatedWeight = 0;
-
     if (!Number.isFinite(quantity) || quantity < 0) {
       estimatedWeight = 0;
     } else if (unitType === 'CX') {
-      // regra antiga: 1 CX = 10 kg (se quiser, depois a gente parametriza por produto)
       estimatedWeight = quantity * 10;
     } else if (unitType === 'KG') {
       estimatedWeight = quantity;
     } else {
-      // UND: quantidade * peso médio
       estimatedWeight = calculateWeight(quantity, averageWeight);
     }
 
     const safeWeight = Number.isFinite(estimatedWeight) ? estimatedWeight : 0;
 
-    // 6) ✅ Estimated Value (peso * preço/kg)
+    // 6) Estimated value
     const estimatedValue = safeWeight * pricePerKg;
 
     if (Number.isFinite(safeWeight)) totalWeight += safeWeight;
@@ -107,8 +95,6 @@ export const calculateOrderMetrics = (items) => {
       averageWeight,
       estimatedWeight: safeWeight,
       estimatedValue: Number.isFinite(estimatedValue) ? estimatedValue : 0,
-
-      // Helpers de display
       formattedWeight: safeWeight.toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
