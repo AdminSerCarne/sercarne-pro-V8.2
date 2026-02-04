@@ -183,10 +183,12 @@ const CartItemControls = ({
           <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
             <CalendarCheck className="w-3 h-3 text-gray-400" />
             <span>
-              {deliveryDate
-                ? format(new Date(deliveryDate), 'dd/MM/yyyy', { locale: ptBR })
-                : 'Selecione uma data'}
-            </span>
+  {(() => {
+    const dateStr = getDeliveryDateStr();
+    if (!dateStr) return 'Selecione uma data';
+    return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: ptBR });
+  })()}
+</span>
 
             {!isOverLimit && validationStatus && (
               <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1 rounded ml-1">
