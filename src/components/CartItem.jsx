@@ -7,7 +7,7 @@ const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
   const metrics = processedItems?.[0] || {};
 
   const pricePerKg = Number(metrics.pricePerKg ?? item.price ?? 0);
-  const pesoMedio = Number(item.peso ?? item.pesoMedio ?? 0);
+  const pesoMedio = Number(item.peso ?? item.pesoMedio ?? item.peso_medio_kg ?? 0);
 
   const formatMoney = (val) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
