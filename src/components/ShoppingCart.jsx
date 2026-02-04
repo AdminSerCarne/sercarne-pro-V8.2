@@ -15,7 +15,7 @@ import DeliveryDateSelector from './DeliveryDateSelector';
 import { ShoppingBag, ArrowLeft, Check, Loader2, AlertOctagon, RefreshCw, User, Phone, FileText, AlertCircle, PartyPopper } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getAvailableStockForDate, validateStockForAllProducts } from '@/utils/stockValidator';
-import schlosserApi from '@/services/schlosserApi';
+import { schlosserApi } from '@/services/schlosserApi';
 
 const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const { 
