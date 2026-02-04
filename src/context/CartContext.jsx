@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo
+} from 'react';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 import { schlosserRules } from '@/domain/schlosserRules';
 
-const CartContext = createContext();
+const CartContext = createContext(null);
 
 export const useCart = () => {
   const context = useContext(CartContext);
@@ -30,14 +37,14 @@ export const CartProvider = ({ children }) => {
   // ✅ UND total do carrinho (CAP 7)
   const getTotalUND = useCallback((items) => {
     return (items || []).reduce((sum, i) => {
-      const q = Number(i?.quantidade ?? 0);
+      const q = Number(i?.quantidade ?? i?.quantity ?? i?.quantity_unit ?? 0);
       return sum + (Number.isFinite(q) ? q : 0);
     }, 0);
   }, []);
 
   /**
    * ✅ Reaplica tabela/preço em TODOS os itens conforme UND total do carrinho.
-   * Regra do Manual: a tabela é definida pelo UND total do carrinho, e o cliente não vê a tabela.
+   * Regra do Manual: a tabela é definida pelo UND total do carrinho.
    */
   const reapplyPriceTables = useCallback(
     (items) => {
@@ -45,15 +52,15 @@ export const CartProvider = ({ children }) => {
 
       return (items || []).map((item) => {
         const tabelas = item?.prices || item?.tabelas || {};
-        const currentPrice = Number(item?.price ?? 0);
+        const currentPrice = Number(item?.price ?? item?.preco ?? item?.price_per_kg ?? 0);
 
-        const { price } = schlosserRules.getTabelaAplicada(totalUND, user, tabelas);
+        const result = schlosserRules.getTabelaAplicada(totalUND, user, tabelas);
+        const nextPrice = Number(result?.price);
 
-        // fallback: se não tiver tabelas no item, não zera — mantém o que já tem
-        const finalPrice = Number(price);
         return {
           ...item,
-          price: Number.isFinite(finalPrice) && finalPrice > 0 ? finalPrice : currentPrice
+          // fallback: se não tiver tabelas no item, mantém o que já tinha
+          price: Number.isFinite(nextPrice) && nextPrice > 0 ? nextPrice : currentPrice
         };
       });
     },
@@ -112,12 +119,9 @@ export const CartProvider = ({ children }) => {
               : i
           );
         } else {
-          // ✅ garante que item entra com price (mesmo que temporário)
-          const initialPrice = Number(product?.price ?? product?.preco ?? product?.price_per_kg ?? 0) || 0;
-          next = [...prev, { ...product, quantidade: qty, variant, price: initialPrice }];
+          next = [...prev, { ...product, quantidade: qty, variant }];
         }
 
-        // ✅ recalcula preços de todos os itens conforme UND total
         return reapplyPriceTables(next);
       });
     },
@@ -130,7 +134,9 @@ export const CartProvider = ({ children }) => {
   const removeFromCart = useCallback(
     (codigo) => {
       setCartItems((prev) => {
-        const next = prev.filter((item) => String(item.codigo).trim() !== String(codigo).trim());
+        const next = prev.filter(
+          (item) => String(item.codigo).trim() !== String(codigo).trim()
+        );
         return reapplyPriceTables(next);
       });
     },
@@ -139,6 +145,7 @@ export const CartProvider = ({ children }) => {
 
   /**
    * ✅ Atualiza quantidade e reaplica tabela (UND total muda)
+   * ✅ ESSA LINHA FICA: return reapplyPriceTables(next);
    */
   const updateItemQuantity = useCallback(
     (codigo, newQuantity) => {
@@ -166,6 +173,7 @@ export const CartProvider = ({ children }) => {
       route_cutoff: '',
       route_city: ''
     });
+    // não limpa selectedClient por conveniência
   }, []);
 
   const getCartMetrics = useCallback(() => {
@@ -206,9 +214,6 @@ export const CartProvider = ({ children }) => {
     [
       cartItems,
       isCartOpen,
-      selectedClient,
-      deliveryInfo,
-      stockUpdateTrigger,
       openCart,
       closeCart,
       addToCart,
@@ -218,6 +223,9 @@ export const CartProvider = ({ children }) => {
       getCartTotal,
       getCartCount,
       getCartMetrics,
+      selectedClient,
+      deliveryInfo,
+      stockUpdateTrigger,
       notifyStockUpdate
     ]
   );
