@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Trash2,
   Plus,
@@ -23,19 +23,20 @@ const CartItemControls = ({
   deliveryDate,
   validationStatus
 }) => {
-  const { processedItems } = calculateOrderMetrics([item]);
+  const { processedItems } = useMemo(() => calculateOrderMetrics([item]), [item]);
   const metrics = processedItems?.[0] || {};
+
   const [updating, setUpdating] = useState(false);
   const [checkingAlternative, setCheckingAlternative] = useState(false);
   const { toast } = useToast();
 
   const maxAvailable = validationStatus ? Number(validationStatus.available || 0) : 9999;
-  const isOverLimit = item.quantidade > maxAvailable;
+  const isOverLimit = Number(item?.quantidade || 0) > maxAvailable;
 
+  // ✅ Helper: garante YYYY-MM-DD (Date, ISO, YYYY-MM-DD, string)
   const getDeliveryDateStr = () => {
     if (!deliveryDate) return null;
 
-    // aceita Date, ISO, YYYY-MM-DD
     if (deliveryDate instanceof Date) {
       if (isNaN(deliveryDate.getTime())) return null;
       return deliveryDate.toISOString().split('T')[0];
@@ -66,12 +67,23 @@ const CartItemControls = ({
     return dateStr;
   };
 
+  const renderDeliveryDateLabel = () => {
+    const dateStr = getDeliveryDateStr();
+    if (!dateStr) return 'Selecione uma data';
+    try {
+      return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: ptBR });
+    } catch {
+      return 'Selecione uma data';
+    }
+  };
+
   // ✅ Manual CAP 9: valida apenas no aumento (e na data correta)
   const handleUpdate = async (newQty) => {
-    if (newQty < 1) return;
+    const nextQty = Number(newQty);
+    if (!Number.isFinite(nextQty) || nextQty < 1) return;
 
-    // Se está aumentando, precisa de data + valida estoque por data
-    const isIncreasing = newQty > item.quantidade;
+    const currentQty = Number(item?.quantidade || 0);
+    const isIncreasing = nextQty > currentQty;
 
     if (isIncreasing) {
       const dateStr = requireDeliveryDate();
@@ -79,10 +91,10 @@ const CartItemControls = ({
 
       setUpdating(true);
       try {
-        const validation = await validateAndSuggestAlternativeDate(item.codigo, newQty, dateStr);
+        const validation = await validateAndSuggestAlternativeDate(item.codigo, nextQty, dateStr);
 
-        if (!validation.isValid) {
-          const b = validation.breakdown || { base: 0, entradas: 0, pedidos: 0, available: 0 };
+        if (!validation?.isValid) {
+          const b = validation?.breakdown || { base: 0, entradas: 0, pedidos: 0, available: 0 };
           const breakdownMsg = `Base: ${b.base} + Entradas: ${b.entradas} - Pedidos: ${b.pedidos} = Disponível: ${b.available}`;
 
           toast({
@@ -94,7 +106,8 @@ const CartItemControls = ({
           return; // bloqueia aumento
         }
 
-        await onUpdateQuantity(item.codigo, newQty);
+        // onUpdateQuantity pode ser sync ou async
+        await Promise.resolve(onUpdateQuantity(item.codigo, nextQty));
       } catch (err) {
         console.error('Error updating cart item:', err);
         toast({
@@ -111,7 +124,7 @@ const CartItemControls = ({
     // Diminuir não precisa validação (manual)
     setUpdating(true);
     try {
-      await onUpdateQuantity(item.codigo, newQty);
+      await Promise.resolve(onUpdateQuantity(item.codigo, nextQty));
     } finally {
       setUpdating(false);
     }
@@ -123,9 +136,9 @@ const CartItemControls = ({
 
     setCheckingAlternative(true);
     try {
-      const validation = await validateAndSuggestAlternativeDate(item.codigo, item.quantidade, dateStr);
+      const validation = await validateAndSuggestAlternativeDate(item.codigo, Number(item?.quantidade || 0), dateStr);
 
-      if (validation.suggestedDate) {
+      if (validation?.suggestedDate) {
         toast({
           title: 'Data sugerida encontrada ✅',
           description: `Estoque disponível a partir de ${format(parseISO(validation.suggestedDate), 'dd/MM/yyyy', { locale: ptBR })}`,
@@ -182,13 +195,7 @@ const CartItemControls = ({
 
           <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
             <CalendarCheck className="w-3 h-3 text-gray-400" />
-            <span>
-  {(() => {
-    const dateStr = getDeliveryDateStr();
-    if (!dateStr) return 'Selecione uma data';
-    return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: ptBR });
-  })()}
-</span>
+            <span>{renderDeliveryDateLabel()}</span>
 
             {!isOverLimit && validationStatus && (
               <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1 rounded ml-1">
@@ -212,8 +219,8 @@ const CartItemControls = ({
 
         <div className="flex items-center bg-white rounded-md border border-gray-200 h-8 shadow-sm">
           <button
-            onClick={() => handleUpdate(item.quantidade - 1)}
-            disabled={updating || item.quantidade <= 1}
+            onClick={() => handleUpdate(Number(item.quantidade || 0) - 1)}
+            disabled={updating || Number(item.quantidade || 0) <= 1}
             className="px-2 hover:bg-gray-50 rounded-l-md h-full transition-colors text-gray-600 border-r border-gray-100 disabled:opacity-50"
             title="Diminuir"
           >
@@ -231,7 +238,7 @@ const CartItemControls = ({
           </div>
 
           <button
-            onClick={() => handleUpdate(item.quantidade + 1)}
+            onClick={() => handleUpdate(Number(item.quantidade || 0) + 1)}
             disabled={updating}
             className="px-2 hover:bg-gray-50 rounded-r-md h-full transition-colors text-gray-600 border-l border-gray-100 disabled:opacity-50 disabled:bg-gray-50"
             title="Aumentar"
