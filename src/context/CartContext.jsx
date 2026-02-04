@@ -30,7 +30,7 @@ export const CartProvider = ({ children }) => {
   // ✅ UND total do carrinho (CAP 7)
   const getTotalUND = useCallback((items) => {
     return (items || []).reduce((sum, i) => {
-      const q = Number(i?.quantidade ?? i?.quantity ?? 0);
+      const q = Number(i?.quantidade ?? 0);
       return sum + (Number.isFinite(q) ? q : 0);
     }, 0);
   }, []);
@@ -39,39 +39,41 @@ export const CartProvider = ({ children }) => {
    * ✅ Reaplica tabela/preço em TODOS os itens conforme UND total do carrinho.
    * Regra do Manual: a tabela é definida pelo UND total do carrinho, e o cliente não vê a tabela.
    */
-  const reapplyPriceTables = useCallback((items) => {
-    const totalUND = getTotalUND(items);
+  const reapplyPriceTables = useCallback(
+    (items) => {
+      const totalUND = getTotalUND(items);
 
-    return (items || []).map((item) => {
-      const tabelas = item?.prices || item?.tabelas || {};
-      const currentPrice = Number(item?.price ?? item?.preco ?? item?.price_per_kg ?? 0);
+      return (items || []).map((item) => {
+        const tabelas = item?.prices || item?.tabelas || {};
+        const currentPrice = Number(item?.price ?? 0);
 
-      const { price } = schlosserRules.getTabelaAplicada(totalUND, user, tabelas);
+        const { price } = schlosserRules.getTabelaAplicada(totalUND, user, tabelas);
 
-      // fallback: se não tiver tabelas no item, não zera — mantém o que já tem
-      const finalPrice = Number(price);
-      return {
-        ...item,
-        price: Number.isFinite(finalPrice) && finalPrice > 0 ? finalPrice : currentPrice
-      };
-    });
-  }, [getTotalUND, user]);
+        // fallback: se não tiver tabelas no item, não zera — mantém o que já tem
+        const finalPrice = Number(price);
+        return {
+          ...item,
+          price: Number.isFinite(finalPrice) && finalPrice > 0 ? finalPrice : currentPrice
+        };
+      });
+    },
+    [getTotalUND, user]
+  );
 
   // ✅ Load cart from localStorage on mount
   useEffect(() => {
     const savedCart = localStorage.getItem('schlosser_cart');
-    if (savedCart) {
-      try {
-        const parsed = JSON.parse(savedCart);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCartItems(reapplyPriceTables(parsed));
-        }
-      } catch (e) {
-        console.error("Error loading cart", e);
+    if (!savedCart) return;
+
+    try {
+      const parsed = JSON.parse(savedCart);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setCartItems(reapplyPriceTables(parsed));
       }
+    } catch (e) {
+      console.error('Error loading cart', e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reapplyPriceTables]);
 
   // ✅ Save cart to localStorage on change
   useEffect(() => {
@@ -93,56 +95,67 @@ export const CartProvider = ({ children }) => {
   /**
    * ✅ Add item e depois reaplica tabela do carrinho todo (CAP 7)
    */
-  const addToCart = useCallback((product, quantity, variant = null) => {
-    const qty = Number(quantity);
-    if (!Number.isFinite(qty) || qty < 1) return;
+  const addToCart = useCallback(
+    (product, quantity, variant = null) => {
+      const qty = Number(quantity);
+      if (!Number.isFinite(qty) || qty < 1) return;
 
-    setCartItems((prev) => {
-      const code = String(product.codigo).trim();
-      const existingItem = prev.find((i) => String(i.codigo).trim() === code);
+      setCartItems((prev) => {
+        const code = String(product.codigo).trim();
+        const existingItem = prev.find((i) => String(i.codigo).trim() === code);
 
-      let next;
-      if (existingItem) {
-        next = prev.map((i) =>
-          String(i.codigo).trim() === code
-            ? { ...i, quantidade: Number(i.quantidade || 0) + qty, variant }
-            : i
-        );
-      } else {
-        next = [...prev, { ...product, quantidade: qty, variant }];
-      }
+        let next;
+        if (existingItem) {
+          next = prev.map((i) =>
+            String(i.codigo).trim() === code
+              ? { ...i, quantidade: Number(i.quantidade || 0) + qty, variant }
+              : i
+          );
+        } else {
+          // ✅ garante que item entra com price (mesmo que temporário)
+          const initialPrice = Number(product?.price ?? product?.preco ?? product?.price_per_kg ?? 0) || 0;
+          next = [...prev, { ...product, quantidade: qty, variant, price: initialPrice }];
+        }
 
-      // ✅ recalcula preços de todos os itens conforme UND total
-      return reapplyPriceTables(next);
-    });
-  }, [reapplyPriceTables]);
+        // ✅ recalcula preços de todos os itens conforme UND total
+        return reapplyPriceTables(next);
+      });
+    },
+    [reapplyPriceTables]
+  );
 
   /**
    * ✅ Remover item e reaplicar tabela (UND total muda)
    */
-  const removeFromCart = useCallback((codigo) => {
-    setCartItems((prev) => {
-      const next = prev.filter((item) => String(item.codigo).trim() !== String(codigo).trim());
-      return reapplyPriceTables(next);
-    });
-  }, [reapplyPriceTables]);
+  const removeFromCart = useCallback(
+    (codigo) => {
+      setCartItems((prev) => {
+        const next = prev.filter((item) => String(item.codigo).trim() !== String(codigo).trim());
+        return reapplyPriceTables(next);
+      });
+    },
+    [reapplyPriceTables]
+  );
 
   /**
    * ✅ Atualiza quantidade e reaplica tabela (UND total muda)
    */
-  const updateItemQuantity = useCallback((codigo, newQuantity) => {
-    const n = Number(newQuantity);
-    if (!Number.isFinite(n) || n < 1) return;
+  const updateItemQuantity = useCallback(
+    (codigo, newQuantity) => {
+      const n = Number(newQuantity);
+      if (!Number.isFinite(n) || n < 1) return;
 
-    setCartItems((prev) => {
-      const next = prev.map((item) =>
-        String(item.codigo).trim() === String(codigo).trim()
-          ? { ...item, quantidade: n }
-          : item
-      );
-      return reapplyPriceTables(next);
-    });
-  }, [reapplyPriceTables]);
+      setCartItems((prev) => {
+        const next = prev.map((item) =>
+          String(item.codigo).trim() === String(codigo).trim()
+            ? { ...item, quantidade: n }
+            : item
+        );
+        return reapplyPriceTables(next);
+      });
+    },
+    [reapplyPriceTables]
+  );
 
   const clearCart = useCallback(() => {
     setCartItems([]);
@@ -169,46 +182,45 @@ export const CartProvider = ({ children }) => {
     return cartItems.reduce((acc, item) => acc + Number(item.quantidade || 0), 0);
   }, [cartItems]);
 
-  const contextValue = useMemo(() => ({
-    cartItems,
-    isCartOpen,
-    setIsCartOpen,
-    openCart,
-    closeCart,
-    addToCart,
-    removeFromCart,
-    updateItemQuantity,
-    clearCart,
-    getCartTotal,
-    getCartCount,
-    getCartMetrics,
-    selectedClient,
-    setSelectedClient,
-    deliveryInfo,
-    setDeliveryInfo,
-    stockUpdateTrigger,
-    notifyStockUpdate
-  }), [
-    cartItems,
-    isCartOpen,
-    selectedClient,
-    deliveryInfo,
-    stockUpdateTrigger,
-    openCart,
-    closeCart,
-    addToCart,
-    removeFromCart,
-    updateItemQuantity,
-    clearCart,
-    getCartTotal,
-    getCartCount,
-    getCartMetrics,
-    notifyStockUpdate
-  ]);
-
-  return (
-    <CartContext.Provider value={contextValue}>
-      {children}
-    </CartContext.Provider>
+  const contextValue = useMemo(
+    () => ({
+      cartItems,
+      isCartOpen,
+      setIsCartOpen,
+      openCart,
+      closeCart,
+      addToCart,
+      removeFromCart,
+      updateItemQuantity,
+      clearCart,
+      getCartTotal,
+      getCartCount,
+      getCartMetrics,
+      selectedClient,
+      setSelectedClient,
+      deliveryInfo,
+      setDeliveryInfo,
+      stockUpdateTrigger,
+      notifyStockUpdate
+    }),
+    [
+      cartItems,
+      isCartOpen,
+      selectedClient,
+      deliveryInfo,
+      stockUpdateTrigger,
+      openCart,
+      closeCart,
+      addToCart,
+      removeFromCart,
+      updateItemQuantity,
+      clearCart,
+      getCartTotal,
+      getCartCount,
+      getCartMetrics,
+      notifyStockUpdate
+    ]
   );
+
+  return <CartContext.Provider value={contextValue}>{children}</CartContext.Provider>;
 };
