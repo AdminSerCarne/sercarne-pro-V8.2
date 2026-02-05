@@ -215,4 +215,6 @@ export const CartProvider = ({ children }) => {
       {children}
     </CartContext.Provider>
   );
-};
+}; // ✅ ESTA CHAVE/FECHAMENTO ESTAVA FALTANDO
+
+export default CartProvider;
