@@ -23,43 +23,45 @@ const ProductCard = ({ product }) => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [weeklyStock, setWeeklyStock] = useState([]);
 
-  // ✅ Derivados (evita crash no 1º render e resolve o build do esbuild)
-  const productCodigo = product?.codigo;
-  const productVisivel = product?.visivel !== false;
+  // ✅ Derivados seguros (NUNCA use product.codigo direto no deps do useEffect)
+  const productCodigo = product?.codigo ?? null;
+  const isVisible = product?.visivel !== false;
+  const shouldRender = Boolean(product && isVisible);
 
-  // Se o produto nem existe ainda, não renderiza nada
-  if (!product) return null;
-  // Se veio marcado como invisível, não renderiza
-  if (!productVisivel) return null;
+  // ✅ Determine Pricing (seguro mesmo se product for null)
+  const cartTotalUND = useMemo(() => {
+    return (cartItems || []).reduce((sum, i) => {
+      const q = Number(i?.quantidade ?? i?.quantity ?? i?.quantity_unit ?? 0);
+      return sum + (Number.isFinite(q) ? q : 0);
+    }, 0);
+  }, [cartItems]);
 
-  // Determine Pricing
-  const cartTotalUND = (cartItems || []).reduce((sum, i) => {
-    const q = Number(i.quantidade ?? i.quantity ?? i.quantity_unit ?? 0);
-    return sum + (Number.isFinite(q) ? q : 0);
-  }, 0);
-
-  // UND total se eu adicionar este item agora
   const totalUNDIfAdd = cartTotalUND + quantity;
 
-  const { price, tabName } = schlosserRules.getTabelaAplicada(
-    totalUNDIfAdd,
-    user,
-    product.prices || {}
-  );
+  const pricesObj = product?.prices || {};
+  const { price, tabName } = useMemo(() => {
+    return schlosserRules.getTabelaAplicada(totalUNDIfAdd, user, pricesObj);
+  }, [totalUNDIfAdd, user, pricesObj]);
 
-  const unit = product.unidade_estoque || 'UND';
+  const unit = product?.unidade_estoque || 'UND';
 
   // Discount Logic
-  const publicPrice = Number(product.prices?.TAB3 || 0);
-  let discountPercent = 0;
-  if (user && publicPrice > 0 && Number(price) > 0) {
-    discountPercent = ((publicPrice - price) / publicPrice) * 100;
-  }
+  const publicPrice = Number(product?.prices?.TAB3 || 0);
+  const discountPercent = useMemo(() => {
+    if (!user) return 0;
+    if (!(publicPrice > 0)) return 0;
+    const p = Number(price || 0);
+    if (!(p > 0)) return 0;
+    return ((publicPrice - p) / publicPrice) * 100;
+  }, [user, publicPrice, price]);
+
   const showDiscount = Boolean(user && discountPercent > 1);
 
-  // Metrics
-  const tempItem = useMemo(
-    () => ({
+  // Metrics (não pode espalhar ...product se product for null)
+  const tempItem = useMemo(() => {
+    if (!product) return null;
+
+    return {
       ...product,
       quantidade: quantity,
       price: price,
@@ -67,23 +69,20 @@ const ProductCard = ({ product }) => {
       peso: product.pesoMedio,
       tipoVenda: product.tipoVenda,
       unitType: unit,
-    }),
-    [product, quantity, price, unit]
-  );
+    };
+  }, [product, quantity, price, unit]);
 
-  const { processedItems } = useMemo(() => calculateOrderMetrics([tempItem]), [tempItem]);
+  const { processedItems } = useMemo(() => {
+    if (!tempItem) return { processedItems: [] };
+    return calculateOrderMetrics([tempItem]);
+  }, [tempItem]);
+
   const metrics = processedItems?.[0] || {};
   const estimatedWeight = Number(metrics.estimatedWeight || 0);
   const estimatedSubtotal = Number(metrics.estimatedValue || 0);
 
-  // Validations for safe display
-  const isWeightValid =
-    product.pesoMedio !== undefined &&
-    product.pesoMedio !== null &&
-    !isNaN(product.pesoMedio) &&
-    Number(product.pesoMedio) > 0;
-
-  const isPriceValid = price !== undefined && price !== null && !isNaN(price) && Number(price) > 0;
+  const isWeightValid = Number(product?.pesoMedio || 0) > 0;
+  const isPriceValid = Number(price || 0) > 0;
 
   // ✅ Helper: pegar data de entrega real (aceita Date ou string)
   const getDeliveryDateStr = () => {
@@ -107,20 +106,13 @@ const ProductCard = ({ product }) => {
     return null;
   };
 
-  // ✅ Debug de preço (opcional) — não quebra build
-  useEffect(() => {
-    if (user && productCodigo) {
-      // console.log(`[PRICE] SKU ${productCodigo} -> UND_TOTAL ${totalUNDIfAdd} => ${tabName} = ${price}`);
-    }
-  }, [user, productCodigo, totalUNDIfAdd, tabName, price]);
-
-  // ✅ Buscar agenda de estoque (7 dias)
+  // ✅ Buscar agenda de estoque (7 dias) — BLOCO DEFINITIVO
   useEffect(() => {
     let isMounted = true;
 
     const fetchStock = async () => {
       // se não tiver código ou estiver invisível, não faz fetch
-      if (!productCodigo || !productVisivel) {
+      if (!productCodigo || !isVisible) {
         if (isMounted) {
           setWeeklyStock([]);
           setLoadingStock(false);
@@ -146,7 +138,7 @@ const ProductCard = ({ product }) => {
     return () => {
       isMounted = false;
     };
-  }, [productCodigo, productVisivel, stockUpdateTrigger]);
+  }, [productCodigo, isVisible, stockUpdateTrigger]);
 
   const handleIncrement = () => setQuantity((prev) => prev + 1);
   const handleDecrement = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
@@ -164,7 +156,8 @@ const ProductCard = ({ product }) => {
       return false;
     }
 
-    const productCode = String(productCodigo).trim();
+    const productCode = String(productCodigo || '').trim();
+    if (!productCode) return false;
 
     const existingItem = (cartItems || []).find((i) => String(i.codigo).trim() === productCode);
     const totalQty = Number(existingItem?.quantidade || 0) + quantity;
@@ -218,7 +211,7 @@ const ProductCard = ({ product }) => {
 
       toast({
         title: 'Produto adicionado ✅',
-        description: `${qtySnapshot} ${unit} de ${product.descricao}`,
+        description: `${qtySnapshot} ${unit} de ${product?.descricao || 'produto'}`,
       });
     } catch (error) {
       console.error('Add to cart error:', error);
@@ -263,17 +256,23 @@ const ProductCard = ({ product }) => {
   const formatWeight = (value) =>
     new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
 
-  const displayImage = product.imagem || 'https://via.placeholder.com/300?text=Sem+Imagem';
+  const displayImage = product?.imagem || 'https://via.placeholder.com/300?text=Sem+Imagem';
 
-  // out of stock para próximos 7 dias (considerando weeklyStock)
-  const isTotallyOutOfStock = !loadingStock && (weeklyStock || []).length > 0 && weeklyStock.every((d) => Number(d.qty || 0) <= 0);
+  const isTotallyOutOfStock =
+    !loadingStock &&
+    Array.isArray(weeklyStock) &&
+    weeklyStock.length > 0 &&
+    weeklyStock.every((d) => Number(d?.qty || 0) <= 0);
+
+  // ✅ Render somente no final (sem quebrar ordem de hooks)
+  if (!shouldRender) return null;
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden flex flex-col h-[620px] border border-gray-100 group">
       <div className="relative h-[200px] w-full bg-white p-4 flex items-center justify-center border-b border-gray-50 flex-shrink-0">
         <img
           src={displayImage}
-          alt={product.descricao}
+          alt={product?.descricao || 'Produto'}
           className="h-full w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-105"
           loading="lazy"
         />
@@ -293,10 +292,10 @@ const ProductCard = ({ product }) => {
 
       <div className="p-4 flex flex-col flex-grow">
         <div className="mb-4 h-[3.5rem]">
-          <h3 className="font-bold text-gray-900 leading-tight text-sm uppercase mb-1 line-clamp-2" title={product.descricao}>
-            {product.descricao}
+          <h3 className="font-bold text-gray-900 leading-tight text-sm uppercase mb-1 line-clamp-2" title={product?.descricao}>
+            {product?.descricao}
           </h3>
-          {product.descricao_complementar && (
+          {product?.descricao_complementar && (
             <p className="text-xs text-gray-500 font-medium uppercase leading-snug line-clamp-1 overflow-hidden text-ellipsis">
               {product.descricao_complementar}
             </p>
@@ -322,7 +321,7 @@ const ProductCard = ({ product }) => {
 
           <div className="inline-flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded text-[10px] font-bold text-gray-500 uppercase mt-1">
             <Scale size={10} />
-            Médio: {formatWeight(product.pesoMedio || 0)} kg
+            Médio: {formatWeight(product?.pesoMedio || 0)} kg
           </div>
         </div>
 
@@ -361,15 +360,15 @@ const ProductCard = ({ product }) => {
                       <TooltipTrigger asChild>
                         <div
                           className={`
-                          flex flex-col items-center justify-center min-w-[40px] px-1 py-1 rounded border text-[9px] cursor-help
-                          ${
-                            isAvailable
-                              ? 'bg-green-50 border-green-200 text-green-800'
-                              : isZero
-                              ? 'bg-gray-50 border-gray-100 text-gray-300'
-                              : 'bg-red-50 border-red-200 text-red-800'
-                          }
-                        `}
+                            flex flex-col items-center justify-center min-w-[40px] px-1 py-1 rounded border text-[9px] cursor-help
+                            ${
+                              isAvailable
+                                ? 'bg-green-50 border-green-200 text-green-800'
+                                : isZero
+                                ? 'bg-gray-50 border-gray-100 text-gray-300'
+                                : 'bg-red-50 border-red-200 text-red-800'
+                            }
+                          `}
                         >
                           <span className="font-bold uppercase mb-0.5">{format(dateObj, 'dd/MM')}</span>
                           <span className="font-bold text-[10px]">{Number(stock.qty || 0)}</span>
