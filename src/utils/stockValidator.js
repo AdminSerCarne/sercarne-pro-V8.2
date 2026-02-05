@@ -249,6 +249,15 @@ export const getAvailableStockForDateBatch = async (productCodes, date) => {
   return out;
 };
 
+/**
+ * Alias for getAvailableStockForDateBatch that returns a Map instead of object
+ * for compatibility with useProducts hook
+ */
+export const getAvailabilityMapForDate = async (productCodes, date) => {
+  const obj = await getAvailableStockForDateBatch(productCodes, date);
+  return new Map(Object.entries(obj));
+};
+
 // -------------------------
 // SUGESTÃO DE DATA (mantém)
 // -------------------------

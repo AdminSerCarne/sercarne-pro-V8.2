@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { SupabaseAuthProvider, useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { AuthProvider } from '@/context/AuthContext'; 
 import { CartProvider, useCart } from '@/context/CartContext';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // Pages
 import HomePage from '@/pages/HomePage';
@@ -96,6 +97,7 @@ function App() {
             </Routes>
             <Toaster />
           </Router>
+          <SpeedInsights />
         </CartProvider>
       </SupabaseAuthProvider>
     </AuthProvider>
