@@ -356,4 +356,16 @@ export const validateStockForAllProducts = async (cartItems, deliveryDate) => {
     isValid: insufficientProducts.length === 0,
     insufficientProducts
   };
+
+  // -------------------------
+  // ✅ COMPAT: MAP PARA UMA DATA (usado pelo useProducts)
+  // -------------------------
+  /**
+   * Retorna um Map<code, available> para uma lista de SKUs em uma data.
+   * Internamente usa o batch que já existe (que retorna objeto).
+   */
+  export const getAvailabilityMapForDate = async (productCodes, date) => {
+    const obj = await getAvailableStockForDateBatch(productCodes, date);
+    return new Map(Object.entries(obj || {}));
+  };
 };
