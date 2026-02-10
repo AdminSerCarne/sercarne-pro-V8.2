@@ -22,19 +22,15 @@ const HeroSection = () => {
   const YOUTUBE_EMBED_URL = "https://www.youtube.com/embed/NVvHTm4e-N4?controls=0&modestbranding=1&rel=0&showinfo=0&autoplay=1&mute=1&loop=1&playlist=NVvHTm4e-N4";
 
   return (
-    <div className="relative h-[600px] md:h-screen w-full overflow-hidden bg-black">
+    <div className="relative h-screen w-full overflow-hidden bg-black">
       
       {/* Background Media Layer */}
       <div className="absolute inset-0 w-full h-full">
         {isMobile ? (
           // Mobile: Static Banner Image
           <div 
-            className="w-full h-[240px] sm:h-[300px] md:h-full bg-no-repeat transition-opacity duration-500"
-            style={{
-              backgroundImage: `url(${HERO_IMAGE_URL})`,
-              backgroundPosition: isMobile ? '50% 50%' : 'center',
-              backgroundSize: isMobile ? '110% auto' : 'cover',
-            }}
+            className="w-full h-full bg-contain bg-center bg-no-repeat transition-opacity duration-500" 
+            style={{ backgroundImage: `url(${HERO_IMAGE_URL})` }} 
           />
         ) : (
           // Desktop: YouTube Embed
@@ -56,7 +52,7 @@ const HeroSection = () => {
       <div className="absolute inset-0 bg-black/40 bg-gradient-to-t from-[#0a0a0a] via-black/20 to-black/50"></div>
 
       {/* Content Layer */}
-      <div className="relative z-10 h-full flex flex-col justify-start md:justify-center items-center text-center px-4 sm:px-6 lg:px-8 pt-24 md:pt-0">
+      <div className="relative z-10 h-full flex flex-col justify-center items-center text-center px-4 sm:px-6 lg:px-8">
           <motion.div
           initial={{ y: 10 }}
           animate={{ y: 0 }}
@@ -79,7 +75,7 @@ const HeroSection = () => {
           </p>
           
           {/* CTA Button */}
-          <Link to="/catalog" className="mt-auto pt-10 md:pt-0">
+          <Link to="/catalog">
             <Button 
               className="h-14 px-10 bg-[#FF6B35] hover:bg-[#e55a2b] text-white font-semibold text-lg rounded-sm uppercase tracking-widest transition-all duration-300 hover:scale-105 shadow-xl border-none ring-offset-2 focus:ring-2 ring-[#FF6B35]"
             >
@@ -93,8 +89,7 @@ const HeroSection = () => {
           initial={{ opacity: 0 }} 
           animate={{ opacity: 1, y: [0, 10, 0] }} 
           transition={{ delay: 2, duration: 1.5, repeat: Infinity }} 
-          className="hidden md:block absolute bottom-10 left-1/2 -translate-x-1/2 text-white/50"
-          className="max-w-5xl w-full flex flex-col items-center h-[420px] sm:h-[460px] md:h-auto"
+          className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/50"
         >
           <ChevronDown size={32} />
         </motion.div>
