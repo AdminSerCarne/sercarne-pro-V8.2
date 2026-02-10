@@ -79,7 +79,7 @@ const HeroSection = () => {
           </p>
           
           {/* CTA Button */}
-          <Link to="/catalog" className="mt-16 sm:mt-10 md:mt-6 border-4 border-lime-400">
+          <Link to="/catalog" className="mt-auto pt-10 md:pt-0">
             <Button 
               className="h-14 px-10 bg-[#FF6B35] hover:bg-[#e55a2b] text-white font-semibold text-lg rounded-sm uppercase tracking-widest transition-all duration-300 hover:scale-105 shadow-xl border-none ring-offset-2 focus:ring-2 ring-[#FF6B35]"
             >
@@ -94,7 +94,7 @@ const HeroSection = () => {
           animate={{ opacity: 1, y: [0, 10, 0] }} 
           transition={{ delay: 2, duration: 1.5, repeat: Infinity }} 
           className="hidden md:block absolute bottom-10 left-1/2 -translate-x-1/2 text-white/50"
-          className="max-w-5xl flex flex-col items-center"
+          className="max-w-5xl w-full flex flex-col items-center h-[420px] sm:h-[460px] md:h-auto"
         >
           <ChevronDown size={32} />
         </motion.div>
