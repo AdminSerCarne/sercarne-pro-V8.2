@@ -52,7 +52,7 @@ const HeroSection = () => {
       <div className="absolute inset-0 bg-black/40 bg-gradient-to-t from-[#0a0a0a] via-black/20 to-black/50"></div>
 
       {/* Content Layer */}
-      <div className="relative z-10 h-full flex flex-col justify-center items-center text-center px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 h-full flex flex-col justify-start md:justify-center items-center text-center px-4 sm:px-6 lg:px-8 pt-24 md:pt-0">
           <motion.div
           initial={{ y: 10 }}
           animate={{ y: 0 }}
@@ -89,7 +89,7 @@ const HeroSection = () => {
           initial={{ opacity: 0 }} 
           animate={{ opacity: 1, y: [0, 10, 0] }} 
           transition={{ delay: 2, duration: 1.5, repeat: Infinity }} 
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/50"
+          className="hidden md:block absolute bottom-10 left-1/2 -translate-x-1/2 text-white/50"
         >
           <ChevronDown size={32} />
         </motion.div>
