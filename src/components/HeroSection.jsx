@@ -30,8 +30,10 @@ const HeroSection = () => {
           // Mobile: Static Banner Image
           <div 
             className="w-full h-[240px] sm:h-[300px] md:h-full bg-no-repeat transition-opacity duration-500"
-            style={{ backgroundImage: `url(${HERO_IMAGE_URL})`,
-              backgroundPosition: isMobile ? '50% 60%' : 'center',
+            style={{
+              backgroundImage: `url(${HERO_IMAGE_URL})`,
+              backgroundPosition: isMobile ? '50% 50%' : 'center',
+              backgroundSize: isMobile ? '110% auto' : 'cover',
             }}
           />
         ) : (
