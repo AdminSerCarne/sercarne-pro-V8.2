@@ -195,8 +195,6 @@ const CatalogPage = () => {
                 <Input
                   type="text"
                   placeholder="Buscar por código ou descrição..."
-                  {/* versão antiga (escura) */}
-                  {/* className="w-full pl-10 bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus:ring-[#FF6B35] focus:border-[#FF6B35] rounded-md" */}
                   className="w-full pl-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:ring-[#FF6B35] focus:border-[#FF6B35] rounded-md"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
