@@ -79,7 +79,7 @@ const HeroSection = () => {
           </p>
           
           {/* CTA Button */}
-          <Link to="/catalog" className="mt-16 sm:mt-10 md:mt-6">
+          <Link to="/catalog" className="mt-16 sm:mt-10 md:mt-6 border-4 border-lime-400">
             <Button 
               className="h-14 px-10 bg-[#FF6B35] hover:bg-[#e55a2b] text-white font-semibold text-lg rounded-sm uppercase tracking-widest transition-all duration-300 hover:scale-105 shadow-xl border-none ring-offset-2 focus:ring-2 ring-[#FF6B35]"
             >
