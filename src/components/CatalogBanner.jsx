@@ -31,7 +31,7 @@ const CatalogBanner = () => {
           <img
             src={bannerImage}
             alt={user ? "Equipe B2B Schlosser" : "Equipe Schlosser"}
-            className="w-full h-full object-cover object-top"
+            className="w-full h-full object-contain object-center"
             loading="eager"
           />
           
