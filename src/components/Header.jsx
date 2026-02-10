@@ -242,14 +242,14 @@ const Header = () => {
                             placeholder="Email / Usuário" 
                             value={loginEmail}
                             onChange={(e) => setLoginEmail(e.target.value)}
-                            className="bg-white/5 border-white/10 text-white"
+                            className="w-full bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35] text-sm"
                         />
                         <Input 
                             type="password" 
                             placeholder="Senha" 
                             value={loginPassword}
                             onChange={(e) => setLoginPassword(e.target.value)}
-                            className="bg-white/5 border-white/10 text-white"
+                             className="w-full bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-[#FF6B35] focus:ring-[#FF6B35] text-sm"
                         />
                         <Button 
                             type="submit" 
