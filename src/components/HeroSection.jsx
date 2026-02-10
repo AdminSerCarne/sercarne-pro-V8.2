@@ -22,7 +22,7 @@ const HeroSection = () => {
   const YOUTUBE_EMBED_URL = "https://www.youtube.com/embed/NVvHTm4e-N4?controls=0&modestbranding=1&rel=0&showinfo=0&autoplay=1&mute=1&loop=1&playlist=NVvHTm4e-N4";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-black">
+    <div className="relative h-[600px] md:h-screen w-full overflow-hidden bg-black">
       
       {/* Background Media Layer */}
       <div className="absolute inset-0 w-full h-full">
