@@ -170,17 +170,51 @@ const ProductCard = ({ product }) => {
   const handleDecrement = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
 
   const validateStock = async () => {
-    const deliveryDateStr = getDeliveryDateStr();
+  const deliveryDateStr = getDeliveryDateStr();
 
-    if (!deliveryDateStr) {
-      toast({
-        title: 'Selecione a data de entrega 📅',
-        description: 'Escolha a rota/data antes de adicionar produtos.',
-        variant: 'destructive',
-        duration: 4500,
-      });
-      return false;
+  // ✅ Se ainda não escolheu data, NÃO bloqueia adicionar.
+  // A validação forte acontece no carrinho ao finalizar.
+  if (!deliveryDateStr) return true;
+
+  const productCode = String(productCodigo || '').trim();
+  if (!productCode) return false;
+
+  const existingItem = (cartItems || []).find((i) => String(i.codigo).trim() === productCode);
+  const totalQty = Number(existingItem?.quantidade || 0) + quantity;
+
+  const validation = await validateAndSuggestAlternativeDate(productCode, totalQty, deliveryDateStr);
+
+  if (!validation?.isValid) {
+    const b = validation?.breakdown || { base: 0, entradas: 0, pedidos: 0, available: 0 };
+    const breakdownMsg = `Base: ${b.base} + Entradas: ${b.entradas} - Pedidos: ${b.pedidos} = Disponível: ${b.available}`;
+
+    toast({
+      title: `Apenas ${validation?.availableQty ?? b.available ?? 0} UND disponível`,
+      description: breakdownMsg,
+      variant: 'destructive',
+      duration: 5500,
+    });
+
+    if (validation?.suggestedDate) {
+      setTimeout(() => {
+        toast({
+          title: 'Sugestão de Data',
+          description: `Temos estoque a partir de ${format(
+            parseISO(validation.suggestedDate),
+            'dd/MM/yyyy',
+            { locale: ptBR }
+          )}.`,
+          className: 'bg-blue-600 text-white border-blue-700',
+          duration: 5500,
+        });
+      }, 600);
     }
+
+    return false;
+  }
+
+  return true;
+};
 
     const productCode = String(productCodigo || '').trim();
     if (!productCode) return false;
@@ -219,58 +253,68 @@ const ProductCard = ({ product }) => {
   };
 
   const handleAddToCart = async () => {
-    setAddingToCart(true);
-    const qtySnapshot = quantity;
+  setAddingToCart(true);
+  const qtySnapshot = quantity;
 
-    try {
-      const isValid = await validateStock();
-      if (!isValid) return;
+  try {
+    const isValid = await validateStock(); // agora não trava sem data
+    if (!isValid) return;
 
-      const productToAdd = { ...product, price: price, preco: price };
-      addToCart(productToAdd, qtySnapshot);
+    const productToAdd = { ...product, price: price, preco: price };
+    addToCart(productToAdd, qtySnapshot);
 
-      setQuantity(1);
+    setQuantity(1);
 
-      toast({
-        title: 'Produto adicionado ✅',
-        description: `${qtySnapshot} ${unit} de ${product?.descricao || 'produto'}`,
-      });
-    } catch (error) {
-      console.error('Add to cart error:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível validar o estoque. Tente novamente.',
-        variant: 'destructive',
-      });
-    } finally {
-      setAddingToCart(false);
-    }
-  };
+    toast({
+      title: 'Produto adicionado ✅',
+      description: `${qtySnapshot} ${unit} de ${product?.descricao || 'produto'}`,
+    });
+  } catch (error) {
+    console.error('Add to cart error:', error);
+    toast({
+      title: 'Erro',
+      description: 'Não foi possível validar o estoque. Tente novamente.',
+      variant: 'destructive',
+    });
+  } finally {
+    setAddingToCart(false);
+  }
+};
 
   const handleCheckout = async () => {
-    setCheckingOut(true);
-    const qtySnapshot = quantity;
+  setCheckingOut(true);
+  const qtySnapshot = quantity;
 
-    try {
-      const isValid = await validateStock();
-      if (!isValid) return;
+  try {
+    const isValid = await validateStock(); // não trava sem data
+    if (!isValid) return;
 
-      const productToAdd = { ...product, price: price, preco: price };
-      addToCart(productToAdd, qtySnapshot);
+    const productToAdd = { ...product, price: price, preco: price };
+    addToCart(productToAdd, qtySnapshot);
 
-      setQuantity(1);
-      setIsCartOpen(true);
-    } catch (error) {
-      console.error('Checkout error:', error);
+    setQuantity(1);
+    setIsCartOpen(true);
+
+    // ✅ Se não tem data ainda, só orienta (não bloqueia abrir carrinho)
+    const deliveryDateStr = getDeliveryDateStr();
+    if (!deliveryDateStr) {
       toast({
-        title: 'Erro',
-        description: 'Não foi possível validar o estoque. Tente novamente.',
-        variant: 'destructive',
+        title: 'Quase lá 😄',
+        description: 'Agora selecione Cliente, Rota e Data de entrega para finalizar.',
+        duration: 4500,
       });
-    } finally {
-      setCheckingOut(false);
     }
-  };
+  } catch (error) {
+    console.error('Checkout error:', error);
+    toast({
+      title: 'Erro',
+      description: 'Não foi possível validar o estoque. Tente novamente.',
+      variant: 'destructive',
+    });
+  } finally {
+    setCheckingOut(false);
+  }
+};
 
   const formatMoney = (value) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
