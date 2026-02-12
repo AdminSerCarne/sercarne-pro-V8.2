@@ -28,6 +28,32 @@ const ProductCard = ({ product }) => {
   const isVisible = product?.visivel !== false;
   const shouldRender = Boolean(product && isVisible);
 
+  // ✅ Galeria de imagens (AE/BE/BG -> product.images) com fallback seguro
+  const gallery = useMemo(() => {
+    const arr = Array.isArray(product?.images) ? product.images : [];
+    const cleaned = arr.filter(Boolean);
+    if (cleaned.length > 0) return cleaned;
+
+    if (product?.imagem) return [product.imagem];
+
+    return ['https://via.placeholder.com/300?text=Sem+Imagem'];
+  }, [product?.images, product?.imagem]);
+
+  const [imgIndex, setImgIndex] = useState(0);
+
+  // reset quando trocar o produto
+  useEffect(() => {
+    setImgIndex(0);
+  }, [productCodigo]);
+
+  const displayImage = gallery[Math.min(imgIndex, Math.max(gallery.length - 1, 0))] || gallery[0];
+  const brandOverlay = product?.brandImage || ''; // AG (limpa) vindo da API
+
+  const nextImage = () => {
+    if (!gallery || gallery.length <= 1) return;
+    setImgIndex((prev) => (prev + 1) % gallery.length);
+  };
+
   // ✅ Determine Pricing (seguro mesmo se product for null)
   const cartTotalUND = useMemo(() => {
     return (cartItems || []).reduce((sum, i) => {
@@ -179,11 +205,7 @@ const ProductCard = ({ product }) => {
         setTimeout(() => {
           toast({
             title: 'Sugestão de Data',
-            description: `Temos estoque a partir de ${format(
-              parseISO(validation.suggestedDate),
-              'dd/MM/yyyy',
-              { locale: ptBR }
-            )}.`,
+            description: `Temos estoque a partir de ${format(parseISO(validation.suggestedDate), 'dd/MM/yyyy', { locale: ptBR })}.`,
             className: 'bg-blue-600 text-white border-blue-700',
             duration: 5500,
           });
@@ -256,8 +278,6 @@ const ProductCard = ({ product }) => {
   const formatWeight = (value) =>
     new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
 
-  const displayImage = product?.imagem || 'https://via.placeholder.com/300?text=Sem+Imagem';
-
   const isTotallyOutOfStock =
     !loadingStock &&
     Array.isArray(weeklyStock) &&
@@ -270,22 +290,54 @@ const ProductCard = ({ product }) => {
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden flex flex-col h-[620px] border border-gray-100 group">
       <div className="relative h-[200px] w-full bg-white p-4 flex items-center justify-center border-b border-gray-50 flex-shrink-0">
-        <img
-          src={displayImage}
-          alt={product?.descricao || 'Produto'}
-          className="h-full w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-105"
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={nextImage}
+          className="w-full h-full flex items-center justify-center"
+          title={gallery.length > 1 ? 'Clique para ver mais fotos' : 'Foto do produto'}
+        >
+          <img
+            src={displayImage}
+            alt={product?.descricao || 'Produto'}
+            className="h-full w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-105"
+            loading="lazy"
+          />
+        </button>
+
+        {/* ✅ Marca overlay (AG) no canto */}
+        {brandOverlay && (
+          <div className="absolute top-2 left-2 bg-white/90 border border-gray-100 rounded-md px-1.5 py-1 shadow-sm">
+            <img src={brandOverlay} alt={product?.brandName || 'Marca'} className="h-6 w-auto object-contain" loading="lazy" />
+          </div>
+        )}
+
         <div className="absolute bottom-2 left-2">
           <Badge className="bg-[#FF6B35] hover:bg-[#FF6B35] text-white font-mono font-bold text-xs px-2 shadow-sm rounded-sm">
             #{productCodigo}
           </Badge>
         </div>
+
         {showDiscount && (
           <div className="absolute top-2 right-2 animate-in zoom-in spin-in-3">
             <Badge className="bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-2 py-1 shadow-md border border-green-700">
               {discountPercent.toFixed(0)}% OFF
             </Badge>
+          </div>
+        )}
+
+        {/* ✅ Bolinhas da galeria */}
+        {gallery.length > 1 && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-white/80 border border-gray-100 rounded-full px-2 py-1 shadow-sm">
+            {gallery.slice(0, 3).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setImgIndex(i)}
+                className={`h-2 w-2 rounded-full ${i === imgIndex ? 'bg-[#FF6B35]' : 'bg-gray-300'}`}
+                aria-label={`Foto ${i + 1}`}
+                title={`Foto ${i + 1}`}
+              />
+            ))}
           </div>
         )}
       </div>
