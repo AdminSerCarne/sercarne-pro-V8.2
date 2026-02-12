@@ -23,38 +23,35 @@ const ProductCard = ({ product }) => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [weeklyStock, setWeeklyStock] = useState([]);
 
-  // ✅ Derivados seguros (NUNCA use product.codigo direto no deps do useEffect)
+  // ✅ Derivados seguros
   const productCodigo = product?.codigo ?? null;
   const isVisible = product?.visivel !== false;
   const shouldRender = Boolean(product && isVisible);
 
-  // ✅ Galeria de imagens (AE/BE/BG -> product.images) com fallback seguro
+  // ✅ Galeria de imagens
   const gallery = useMemo(() => {
     const arr = Array.isArray(product?.images) ? product.images : [];
     const cleaned = arr.filter(Boolean);
     if (cleaned.length > 0) return cleaned;
-
     if (product?.imagem) return [product.imagem];
-
     return ['https://via.placeholder.com/300?text=Sem+Imagem'];
   }, [product?.images, product?.imagem]);
 
   const [imgIndex, setImgIndex] = useState(0);
 
-  // reset quando trocar o produto
   useEffect(() => {
     setImgIndex(0);
   }, [productCodigo]);
 
   const displayImage = gallery[Math.min(imgIndex, Math.max(gallery.length - 1, 0))] || gallery[0];
-  const brandOverlay = product?.brandImage || ''; // AG (limpa) vindo da API
+  const brandOverlay = product?.brandImage || '';
 
   const nextImage = () => {
     if (!gallery || gallery.length <= 1) return;
     setImgIndex((prev) => (prev + 1) % gallery.length);
   };
 
-  // ✅ Determine Pricing (seguro mesmo se product for null)
+  // ✅ Pricing
   const cartTotalUND = useMemo(() => {
     return (cartItems || []).reduce((sum, i) => {
       const q = Number(i?.quantidade ?? i?.quantity ?? i?.quantity_unit ?? 0);
@@ -83,7 +80,7 @@ const ProductCard = ({ product }) => {
 
   const showDiscount = Boolean(user && discountPercent > 1);
 
-  // Metrics (não pode espalhar ...product se product for null)
+  // Metrics
   const tempItem = useMemo(() => {
     if (!product) return null;
 
@@ -132,12 +129,11 @@ const ProductCard = ({ product }) => {
     return null;
   };
 
-  // ✅ Buscar agenda de estoque (7 dias) — BLOCO DEFINITIVO
+  // ✅ Buscar agenda de estoque (7 dias)
   useEffect(() => {
     let isMounted = true;
 
     const fetchStock = async () => {
-      // se não tiver código ou estiver invisível, não faz fetch
       if (!productCodigo || !isVisible) {
         if (isMounted) {
           setWeeklyStock([]);
@@ -169,52 +165,14 @@ const ProductCard = ({ product }) => {
   const handleIncrement = () => setQuantity((prev) => prev + 1);
   const handleDecrement = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
 
-  const validateStock = async () => {
-  const deliveryDateStr = getDeliveryDateStr();
-
-  // ✅ Se ainda não escolheu data, NÃO bloqueia adicionar.
-  // A validação forte acontece no carrinho ao finalizar.
-  if (!deliveryDateStr) return true;
-
-  const productCode = String(productCodigo || '').trim();
-  if (!productCode) return false;
-
-  const existingItem = (cartItems || []).find((i) => String(i.codigo).trim() === productCode);
-  const totalQty = Number(existingItem?.quantidade || 0) + quantity;
-
-  const validation = await validateAndSuggestAlternativeDate(productCode, totalQty, deliveryDateStr);
-
-  if (!validation?.isValid) {
-    const b = validation?.breakdown || { base: 0, entradas: 0, pedidos: 0, available: 0 };
-    const breakdownMsg = `Base: ${b.base} + Entradas: ${b.entradas} - Pedidos: ${b.pedidos} = Disponível: ${b.available}`;
-
-    toast({
-      title: `Apenas ${validation?.availableQty ?? b.available ?? 0} UND disponível`,
-      description: breakdownMsg,
-      variant: 'destructive',
-      duration: 5500,
-    });
-
-    if (validation?.suggestedDate) {
-      setTimeout(() => {
-        toast({
-          title: 'Sugestão de Data',
-          description: `Temos estoque a partir de ${format(
-            parseISO(validation.suggestedDate),
-            'dd/MM/yyyy',
-            { locale: ptBR }
-          )}.`,
-          className: 'bg-blue-600 text-white border-blue-700',
-          duration: 5500,
-        });
-      }, 600);
-    }
-
-    return false;
-  }
-
-  return true;
-};
+  /**
+   * ✅ VALIDAR ESTOQUE SÓ QUANDO EXISTE DATA
+   * - Se não tem data, não valida e NÃO bloqueia (regra V8.3)
+   * - Validação forte fica no carrinho ao FINALIZAR PEDIDO
+   */
+  const validateStockIfHasDate = async () => {
+    const deliveryDateStr = getDeliveryDateStr();
+    if (!deliveryDateStr) return true; // ✅ SEM DATA: NÃO BLOQUEIA
 
     const productCode = String(productCodigo || '').trim();
     if (!productCode) return false;
@@ -239,7 +197,11 @@ const ProductCard = ({ product }) => {
         setTimeout(() => {
           toast({
             title: 'Sugestão de Data',
-            description: `Temos estoque a partir de ${format(parseISO(validation.suggestedDate), 'dd/MM/yyyy', { locale: ptBR })}.`,
+            description: `Temos estoque a partir de ${format(
+              parseISO(validation.suggestedDate),
+              'dd/MM/yyyy',
+              { locale: ptBR }
+            )}.`,
             className: 'bg-blue-600 text-white border-blue-700',
             duration: 5500,
           });
@@ -253,68 +215,68 @@ const ProductCard = ({ product }) => {
   };
 
   const handleAddToCart = async () => {
-  setAddingToCart(true);
-  const qtySnapshot = quantity;
+    setAddingToCart(true);
+    const qtySnapshot = quantity;
 
-  try {
-    const isValid = await validateStock(); // agora não trava sem data
-    if (!isValid) return;
+    try {
+      const ok = await validateStockIfHasDate(); // ✅ só valida se já tiver data
+      if (!ok) return;
 
-    const productToAdd = { ...product, price: price, preco: price };
-    addToCart(productToAdd, qtySnapshot);
+      const productToAdd = { ...product, price: price, preco: price };
+      addToCart(productToAdd, qtySnapshot);
 
-    setQuantity(1);
+      setQuantity(1);
 
-    toast({
-      title: 'Produto adicionado ✅',
-      description: `${qtySnapshot} ${unit} de ${product?.descricao || 'produto'}`,
-    });
-  } catch (error) {
-    console.error('Add to cart error:', error);
-    toast({
-      title: 'Erro',
-      description: 'Não foi possível validar o estoque. Tente novamente.',
-      variant: 'destructive',
-    });
-  } finally {
-    setAddingToCart(false);
-  }
-};
+      toast({
+        title: 'Produto adicionado ✅',
+        description: `${qtySnapshot} ${unit} de ${product?.descricao || 'produto'}`,
+      });
+    } catch (error) {
+      console.error('Add to cart error:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível validar o estoque. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAddingToCart(false);
+    }
+  };
 
   const handleCheckout = async () => {
-  setCheckingOut(true);
-  const qtySnapshot = quantity;
+    setCheckingOut(true);
+    const qtySnapshot = quantity;
 
-  try {
-    const isValid = await validateStock(); // não trava sem data
-    if (!isValid) return;
+    try {
+      const ok = await validateStockIfHasDate(); // ✅ só valida se já tiver data
+      if (!ok) return;
 
-    const productToAdd = { ...product, price: price, preco: price };
-    addToCart(productToAdd, qtySnapshot);
+      const productToAdd = { ...product, price: price, preco: price };
+      addToCart(productToAdd, qtySnapshot);
 
-    setQuantity(1);
-    setIsCartOpen(true);
+      setQuantity(1);
+      setIsCartOpen(true);
 
-    // ✅ Se não tem data ainda, só orienta (não bloqueia abrir carrinho)
-    const deliveryDateStr = getDeliveryDateStr();
-    if (!deliveryDateStr) {
+      // ✅ Se ainda não tem data, só orienta
+      const deliveryDateStr = getDeliveryDateStr();
+      if (!deliveryDateStr) {
+        toast({
+          title: 'Quase lá 😄',
+          description: 'Agora selecione Cliente, Rota e Data de entrega para finalizar.',
+          duration: 4500,
+        });
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
       toast({
-        title: 'Quase lá 😄',
-        description: 'Agora selecione Cliente, Rota e Data de entrega para finalizar.',
-        duration: 4500,
+        title: 'Erro',
+        description: 'Não foi possível validar o estoque. Tente novamente.',
+        variant: 'destructive',
       });
+    } finally {
+      setCheckingOut(false);
     }
-  } catch (error) {
-    console.error('Checkout error:', error);
-    toast({
-      title: 'Erro',
-      description: 'Não foi possível validar o estoque. Tente novamente.',
-      variant: 'destructive',
-    });
-  } finally {
-    setCheckingOut(false);
-  }
-};
+  };
 
   const formatMoney = (value) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
@@ -328,7 +290,6 @@ const ProductCard = ({ product }) => {
     weeklyStock.length > 0 &&
     weeklyStock.every((d) => Number(d?.qty || 0) <= 0);
 
-  // ✅ Render somente no final (sem quebrar ordem de hooks)
   if (!shouldRender) return null;
 
   return (
@@ -348,7 +309,6 @@ const ProductCard = ({ product }) => {
           />
         </button>
 
-        {/* ✅ Marca overlay (AG) no canto */}
         {brandOverlay && (
           <div className="absolute top-2 left-2 bg-white/90 border border-gray-100 rounded-md px-1.5 py-1 shadow-sm">
             <img src={brandOverlay} alt={product?.brandName || 'Marca'} className="h-6 w-auto object-contain" loading="lazy" />
@@ -369,7 +329,6 @@ const ProductCard = ({ product }) => {
           </div>
         )}
 
-        {/* ✅ Bolinhas da galeria */}
         {gallery.length > 1 && (
           <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-white/80 border border-gray-100 rounded-full px-2 py-1 shadow-sm">
             {gallery.slice(0, 3).map((_, i) => (
@@ -542,7 +501,7 @@ const ProductCard = ({ product }) => {
               className="flex-1 h-full bg-green-600 hover:bg-green-700 text-white font-semibold text-sm rounded-lg shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed px-1"
               onClick={handleCheckout}
               disabled={isTotallyOutOfStock || addingToCart || checkingOut}
-              title="Adicionar e finalizar pedido agora"
+              title="Adicionar e abrir o carrinho"
             >
               {checkingOut ? (
                 <Loader2 size={16} className="animate-spin" />
