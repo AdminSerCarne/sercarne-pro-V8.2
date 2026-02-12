@@ -173,6 +173,8 @@ export const schlosserApi = {
           const fallbackRaw = cleanStr(row[10]); // AF
 
           const imagesRaw = [img1, img2, img3].filter(Boolean);
+          if (imagesRaw.length === 0 && fallbackRaw) imagesRaw.push(fallbackRaw);
+          
           const images = imagesRaw.map((u) => this._processImageUrl(u)).filter(Boolean);
 
           // imagem principal (compatibilidade)
