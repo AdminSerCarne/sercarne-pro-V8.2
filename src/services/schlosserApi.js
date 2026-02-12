@@ -81,15 +81,37 @@ export const schlosserApi = {
   },
 
   async getProducts(role) {
-    const cacheKey = `${CACHE_PREFIX}products_v7_visible`;
+    const cacheKey = `${CACHE_PREFIX}products_v8_images_AE_BE_BG_brand_AG`;
     const cached = this._getCache(cacheKey);
     if (cached) return cached;
 
-    // ✅ inclui AX (visível)
-    const query = 'SELECT D, I, V, W, X, Y, AA, AE, AF, AG, AH, AK, AL, AC, E, AX WHERE D > 0';
+    /**
+     * ✅ Colunas usadas (SHEETS):
+     * D  = Código produto
+     * I  = Peso médio
+     * V,W,X,Y,AA = Tabelas (TAB0, TAB5, TAB4, TAB1, TAB3)
+     *
+     * AE = 1ª foto limpa (export)
+     * AF = 1ª foto bruta (fallback)
+     * BE = 2ª foto limpa (export)
+     * BG = 3ª foto limpa (export)
+     *
+     * AG = marca limpa (export)
+     * AH = marca bruta (fallback)
+     * AI = Código + Nome marca (ex.: 5010 BAH BEEF)
+     *
+     * AK/AL/E = descrições
+     * AC = tipoVenda
+     * AX = visível
+     */
+
+    // ⚠️ range precisa ir até BH para BG/BH existirem no retorno do GVIZ
+    const query =
+      'SELECT D, I, V, W, X, Y, AA, AE, BE, BG, AF, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
+
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
       SHEET_NAME
-    )}&range=A9:AX&tq=${encodeURIComponent(query)}`;
+    )}&range=A9:BH&tq=${encodeURIComponent(query)}`;
 
     try {
       const res = await fetch(url);
@@ -144,27 +166,49 @@ export const schlosserApi = {
 
           const weight = parseNum(row[1]);
 
-          let img = '';
+          // --- IMAGENS (AE/BE/BG) + fallback AF ---
+          const img1 = cleanStr(row[7]);  // AE
+          const img2 = cleanStr(row[8]);  // BE
+          const img3 = cleanStr(row[9]);  // BG
+          const fallbackRaw = cleanStr(row[10]); // AF
+
+          const imagesRaw = [img1, img2, img3].filter(Boolean);
+          const images = imagesRaw.map((u) => this._processImageUrl(u)).filter(Boolean);
+
+          // imagem principal (compatibilidade)
+          let primaryImg = '';
           let isBrandImage = false;
-          if (row[7]) img = row[7];
-          else if (row[8]) img = row[8];
-          else if (row[9]) img = row[9];
-          else if (row[10]) {
-            img = row[10];
+
+          if (imagesRaw.length > 0) primaryImg = imagesRaw[0];
+          else if (fallbackRaw) primaryImg = fallbackRaw;
+
+          // --- MARCA (AG limpa, AH bruta fallback) + nome (AI) ---
+          const brandClean = cleanStr(row[11]); // AG
+          const brandRaw = cleanStr(row[12]);   // AH
+          const brandName = cleanStr(row[13]);  // AI
+
+          const brandToUse = brandClean || brandRaw || '';
+          const brandImage = brandToUse ? this._processImageUrl(brandToUse) : '';
+
+          if (!primaryImg && brandToUse) {
+            primaryImg = brandToUse;
             isBrandImage = true;
           }
 
-          const descAK = cleanStr(row[11]);
-          const descAL = cleanStr(row[12]);
-          const descE = cleanStr(row[14]);
+          const descAK = cleanStr(row[14]); // AK
+          const descAL = cleanStr(row[15]); // AL
+          const descE = cleanStr(row[17]);  // E
 
           const desc = descAK || descAL || descE || 'Produto sem descrição';
 
           let descComplementar = descAL;
           if (desc === descAL) descComplementar = '';
 
-          // AX = visível (index 15 no SELECT)
-          const axValue = row[15];
+          // AC = tipoVenda
+          const tipoVenda = String(row[16] || 'UND').toUpperCase();
+
+          // AX = visível (index 18)
+          const axValue = row[18];
           let isVisible = false;
 
           if (axValue === true) {
@@ -173,6 +217,8 @@ export const schlosserApi = {
             const up = axValue.toUpperCase().trim();
             if (up === 'TRUE' || up === 'VERDADEIRO') isVisible = true;
           }
+
+          const processedPrimary = primaryImg ? this._processImageUrl(primaryImg) : '';
 
           return {
             id: `${sku}-${idx}`,
@@ -184,9 +230,17 @@ export const schlosserApi = {
             peso: parseFloat(weight),
             pesoMedio: parseFloat(weight),
             prices,
-            imagem: this._processImageUrl(img),
+
+            // compatibilidade
+            imagem: processedPrimary,
             isBrandImage,
-            tipoVenda: String(row[13] || 'UND').toUpperCase(),
+
+            // novo: galeria + marca
+            images,
+            brandImage,
+            brandName,
+
+            tipoVenda,
             visivel: isVisible,
             ax_raw: axValue,
           };
@@ -202,7 +256,6 @@ export const schlosserApi = {
   },
 
   async getCities() {
-    // ✅ preferir cidades a partir das rotas
     try {
       const routes = await this.getRoutes();
       if (routes && routes.length > 0) {
@@ -383,7 +436,6 @@ export const schlosserApi = {
   },
 
   async getOrdersByProduct(sku) {
-    // Mantido como helper (debug), mas o estoque oficial NÃO usa mais isso.
     const targetSku = String(sku).trim();
     console.log('🔍 getOrdersByProduct START', { sku: targetSku, tipo: typeof sku });
 
@@ -436,7 +488,6 @@ export const schlosserApi = {
   async calculateAvailableStock(codigo, deliveryDate) {
     const safeCode = String(codigo).trim();
 
-    // Aceita Date ou string e normaliza para "YYYY-MM-DD"
     const dateObj = deliveryDate instanceof Date ? deliveryDate : new Date(deliveryDate);
     const targetDateStr = isNaN(dateObj.getTime())
       ? String(deliveryDate).split('T')[0]
@@ -444,7 +495,6 @@ export const schlosserApi = {
 
     console.groupCollapsed(`[schlosserApi] calculateAvailableStock (OFFICIAL) ${safeCode} @ ${targetDateStr}`);
 
-    // ✅ Fonte oficial: stockValidator
     const breakdown = await getStockBreakdown(safeCode, targetDateStr);
 
     console.log('[schlosserApi] Breakdown:', breakdown);
@@ -513,9 +563,7 @@ export const checkRLSPolicies = async () => {
   return report;
 };
 
-// Expose test function to window for browser console debugging
 if (typeof window !== 'undefined') {
-  // só pra facilitar debug pelo console
   window.schlosserApi = schlosserApi;
 
   window.testStockCalculation = async (sku, date) => {
