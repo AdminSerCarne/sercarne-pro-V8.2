@@ -30,9 +30,6 @@ const CartItemControls = ({
   const [checkingAlternative, setCheckingAlternative] = useState(false);
   const { toast } = useToast();
 
-  const maxAvailable = validationStatus ? Number(validationStatus.available || 0) : 9999;
-  const isOverLimit = Number(item?.quantidade || 0) > maxAvailable;
-
   // ✅ Helper: garante YYYY-MM-DD (Date, ISO, YYYY-MM-DD, string)
   const getDeliveryDateStr = () => {
     if (!deliveryDate) return null;
@@ -53,31 +50,30 @@ const CartItemControls = ({
     return null;
   };
 
-  const requireDeliveryDate = () => {
-    const dateStr = getDeliveryDateStr();
-    if (!dateStr) {
-      toast({
-        title: 'Selecione a data de entrega 📅',
-        description: 'Para ajustar quantidades, escolha rota/data primeiro.',
-        variant: 'destructive',
-        duration: 4500
-      });
-      return null;
-    }
-    return dateStr;
-  };
+  const deliveryDateStr = getDeliveryDateStr();
+  const hasDeliveryDate = Boolean(deliveryDateStr);
+
+  // ✅ Max disponível só faz sentido se tiver data validada (senão não usamos pra bloquear UI)
+  const maxAvailable = hasDeliveryDate && validationStatus ? Number(validationStatus.available || 0) : null;
+  const isOverLimit =
+    hasDeliveryDate &&
+    typeof maxAvailable === 'number' &&
+    Number(item?.quantidade || 0) > maxAvailable;
 
   const renderDeliveryDateLabel = () => {
-    const dateStr = getDeliveryDateStr();
-    if (!dateStr) return 'Selecione uma data';
+    if (!deliveryDateStr) return 'Selecione rota/data para validar';
     try {
-      return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: ptBR });
+      return format(parseISO(deliveryDateStr), 'dd/MM/yyyy', { locale: ptBR });
     } catch {
-      return 'Selecione uma data';
+      return 'Selecione rota/data para validar';
     }
   };
 
-  // ✅ Manual CAP 9: valida apenas no aumento (e na data correta)
+  /**
+   * ✅ V8.3: NUNCA bloquear carrinho por falta de data.
+   * - Sem data: permite aumentar/diminuir normalmente (sem validação de estoque).
+   * - Com data: valida estoque apenas quando aumentar (mantém manual CAP 9).
+   */
   const handleUpdate = async (newQty) => {
     const nextQty = Number(newQty);
     if (!Number.isFinite(nextQty) || nextQty < 1) return;
@@ -85,13 +81,22 @@ const CartItemControls = ({
     const currentQty = Number(item?.quantidade || 0);
     const isIncreasing = nextQty > currentQty;
 
-    if (isIncreasing) {
-      const dateStr = requireDeliveryDate();
-      if (!dateStr) return;
-
+    // --- Sem data: não valida (deixa pra validação forte no FINALIZAR PEDIDO) ---
+    if (!hasDeliveryDate) {
       setUpdating(true);
       try {
-        const validation = await validateAndSuggestAlternativeDate(item.codigo, nextQty, dateStr);
+        await Promise.resolve(onUpdateQuantity(item.codigo, nextQty));
+      } finally {
+        setUpdating(false);
+      }
+      return;
+    }
+
+    // --- Com data: valida apenas no aumento ---
+    if (isIncreasing) {
+      setUpdating(true);
+      try {
+        const validation = await validateAndSuggestAlternativeDate(item.codigo, nextQty, deliveryDateStr);
 
         if (!validation?.isValid) {
           const b = validation?.breakdown || { base: 0, entradas: 0, pedidos: 0, available: 0 };
@@ -106,7 +111,6 @@ const CartItemControls = ({
           return; // bloqueia aumento
         }
 
-        // onUpdateQuantity pode ser sync ou async
         await Promise.resolve(onUpdateQuantity(item.codigo, nextQty));
       } catch (err) {
         console.error('Error updating cart item:', err);
@@ -121,7 +125,7 @@ const CartItemControls = ({
       return;
     }
 
-    // Diminuir não precisa validação (manual)
+    // Diminuir (com data) não precisa validação
     setUpdating(true);
     try {
       await Promise.resolve(onUpdateQuantity(item.codigo, nextQty));
@@ -130,13 +134,28 @@ const CartItemControls = ({
     }
   };
 
+  /**
+   * ✅ Sugerir alternativa só faz sentido com data escolhida.
+   * Aqui sim a gente avisa com toast (mas NÃO bloqueia carrinho).
+   */
   const handleSuggestAlternative = async () => {
-    const dateStr = requireDeliveryDate();
-    if (!dateStr) return;
+    if (!hasDeliveryDate) {
+      toast({
+        title: 'Selecione rota/data 📅',
+        description: 'Escolha uma data de entrega para sugerirmos a melhor alternativa de estoque.',
+        variant: 'destructive',
+        duration: 4500
+      });
+      return;
+    }
 
     setCheckingAlternative(true);
     try {
-      const validation = await validateAndSuggestAlternativeDate(item.codigo, Number(item?.quantidade || 0), dateStr);
+      const validation = await validateAndSuggestAlternativeDate(
+        item.codigo,
+        Number(item?.quantidade || 0),
+        deliveryDateStr
+      );
 
       if (validation?.suggestedDate) {
         toast({
@@ -197,9 +216,17 @@ const CartItemControls = ({
             <CalendarCheck className="w-3 h-3 text-gray-400" />
             <span>{renderDeliveryDateLabel()}</span>
 
-            {!isOverLimit && validationStatus && (
+            {/* ✅ Só mostra "Disponível" quando existe data (senão é enganos) */}
+            {hasDeliveryDate && !isOverLimit && validationStatus && (
               <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1 rounded ml-1">
                 Disponível: {validationStatus.available} UND
+              </span>
+            )}
+
+            {/* ✅ Sem data: dica leve (não destrutivo) */}
+            {!hasDeliveryDate && (
+              <span className="text-[10px] text-orange-600 font-medium bg-orange-50 px-1 rounded ml-1">
+                Defina rota/data para validar estoque
               </span>
             )}
           </div>
@@ -248,6 +275,7 @@ const CartItemControls = ({
         </div>
       </div>
 
+      {/* ✅ Só faz sentido alertar "estoque insuficiente" se tiver data */}
       {isOverLimit && (
         <div className="flex flex-col gap-2 text-xs text-red-600 bg-white border border-red-200 p-2 rounded-md w-full animate-in slide-in-from-top-1 mt-1 shadow-sm">
           <div className="flex items-start gap-2">
