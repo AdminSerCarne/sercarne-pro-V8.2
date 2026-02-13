@@ -10,8 +10,8 @@ import { schlosserApi } from '@/services/schlosserApi';
 const DeliveryDateSelector = ({
   cartItem, // pode ser null (quando carrinho vazio)
   route, // { dias_entrega, corte_ate, descricao_grupo_rota... }
-  selectedDate,
-  onDateSelect,
+  selectedDate, // string yyyy-mm-dd | ISO | Date
+  onDateSelect, // RECOMENDADO: salvar string yyyy-mm-dd no deliveryInfo
   className
 }) => {
   const [dates, setDates] = useState([]);
@@ -68,6 +68,28 @@ const DeliveryDateSelector = ({
     return null;
   };
 
+  // ✅ Sempre emitir string yyyy-mm-dd (evita bug de fuso/UTC)
+  const emitDateString = (dateObj) => {
+    if (!dateObj) return null;
+    try {
+      return format(dateObj, 'yyyy-MM-dd');
+    } catch {
+      return null;
+    }
+  };
+
+  // deps estáveis
+  const routeKey = useMemo(() => {
+    if (!route) return '';
+    return `${String(route?.dias_entrega || '')}|${String(route?.corte_ate || '')}`;
+  }, [route]);
+
+  const cartKey = useMemo(() => {
+    const code = String(cartItem?.codigo ?? cartItem?.sku ?? '').trim();
+    const qty = Number(cartItem?.quantidade ?? cartItem?.quantity ?? cartItem?.quantity_unit ?? 1);
+    return `${code}|${Number.isFinite(qty) ? qty : 1}`;
+  }, [cartItem]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -94,7 +116,6 @@ const DeliveryDateSelector = ({
 
         const validDayNumbers = getValidDeliveryDays(route?.dias_entrega);
 
-        // Se rota não tiver dias, não tem o que exibir
         if (!validDayNumbers || validDayNumbers.length === 0) {
           if (isMounted) {
             setDates([]);
@@ -104,10 +125,12 @@ const DeliveryDateSelector = ({
           return;
         }
 
-        // Pega SKU/QTD se existir item (modo inteligente)
+        // produto / qtd se existir (modo inteligente)
         const quantityNeeded = Number(
           cartItem?.quantidade ?? cartItem?.quantity ?? cartItem?.quantity_unit ?? 1
         );
+        const qtyNeededSafe = Number.isFinite(quantityNeeded) && quantityNeeded > 0 ? quantityNeeded : 1;
+
         const productCode = String(cartItem?.codigo ?? cartItem?.sku ?? '').trim();
         const hasProductContext = Boolean(productCode);
 
@@ -137,7 +160,7 @@ const DeliveryDateSelector = ({
           for (const date of potentialDates) {
             const result = await schlosserApi.calculateAvailableStock(productCode, date);
             const available = Number(result?.availableStock ?? 0);
-            const isSufficient = available >= quantityNeeded;
+            const isSufficient = available >= qtyNeededSafe;
 
             const dateObj = {
               date,
@@ -150,11 +173,10 @@ const DeliveryDateSelector = ({
             };
 
             calculatedDates.push(dateObj);
-
             if (isSufficient && !firstGreenDate) firstGreenDate = dateObj;
           }
         } else {
-          // MODO B: sem produto → lista datas neutras, selecionáveis
+          // MODO B: sem produto → lista neutra
           for (const date of potentialDates) {
             calculatedDates.push({
               date,
@@ -162,7 +184,7 @@ const DeliveryDateSelector = ({
               formattedDate: format(date, 'dd/MM'),
               fullDateStr: format(date, 'yyyy-MM-dd'),
               availableStock: null,
-              isSufficient: true, // neutro: não bloqueia seleção
+              isSufficient: true,
               status: 'neutral'
             });
           }
@@ -172,21 +194,16 @@ const DeliveryDateSelector = ({
 
         setDates(calculatedDates);
 
-        // Auto-sugestão:
-        // - com produto: sugere primeira data verde
-        // - sem produto: sugere primeira data da lista
+        // Sugestão:
         const normalizedSelected = normalizeSelectedDate(selectedDate);
+        const suggestion = hasProductContext ? firstGreenDate : (calculatedDates[0] || null);
+        setSuggestedDate(suggestion);
 
-        if (!normalizedSelected) {
-          const suggestion = hasProductContext ? firstGreenDate : (calculatedDates[0] || null);
-          setSuggestedDate(suggestion);
-
-          // auto seleciona só se tiver sugestão
-          if (suggestion?.date) onDateSelect(suggestion.date);
-        } else {
-          // mantém sugestão informativa
-          const suggestion = hasProductContext ? firstGreenDate : (calculatedDates[0] || null);
-          setSuggestedDate(suggestion);
+        // ✅ Auto-seleciona só se ainda não existe selectedDate
+        // ✅ E SEMPRE manda string yyyy-mm-dd
+        if (!normalizedSelected && suggestion?.date) {
+          const dateStr = suggestion.fullDateStr || emitDateString(suggestion.date);
+          if (dateStr) onDateSelect(dateStr);
         }
 
       } catch (error) {
@@ -206,11 +223,12 @@ const DeliveryDateSelector = ({
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, cartItem, safeCutoff]);
+  }, [routeKey, cartKey, safeCutoff]);
 
   const handleSelect = (dateObj) => {
     if (!dateObj?.date) return;
-    onDateSelect(dateObj.date);
+    // ✅ SEMPRE string yyyy-mm-dd (mata bug UTC)
+    onDateSelect(dateObj.fullDateStr || emitDateString(dateObj.date));
   };
 
   if (!route) return null;
@@ -242,12 +260,10 @@ const DeliveryDateSelector = ({
 
           const hasStock = typeof dateObj.availableStock === 'number';
 
-          // Styling
           let containerClass = "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10";
           let icon = null;
 
           if (dateObj.status === 'neutral') {
-            // sem produto: neutro
             if (isSelected) {
               containerClass = "bg-[#FF6B35] border-[#FF6B35] text-white shadow-md";
               icon = <CheckCircle2 size={14} className="text-white" />;
@@ -279,6 +295,7 @@ const DeliveryDateSelector = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
                     onClick={() => handleSelect(dateObj)}
                     className={cn(
                       "relative flex items-center justify-between p-3 rounded-md border transition-all w-full text-left shrink-0",
