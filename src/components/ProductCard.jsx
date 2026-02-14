@@ -53,7 +53,12 @@ const ProductCard = ({ product }) => {
     if (!gallery || gallery.length <= 1) return;
     setImgIndex((prev) => (prev + 1) % gallery.length);
   };
-
+  
+  const prevImage = () => {
+  if (!gallery || gallery.length <= 1) return;
+  setImgIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
+  };
+  
   // ✅ Pricing
   const cartTotalUND = useMemo(() => {
     return (cartItems || []).reduce((sum, i) => {
@@ -329,7 +334,35 @@ const ProductCard = ({ product }) => {
             loading="lazy"
           />
         </button>
-
+        {gallery.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                prevImage();
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/80 border border-gray-100 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              aria-label="Foto anterior"
+              title="Anterior"
+            >
+              <span className="text-lg leading-none">&lt;</span>
+            </button>
+        
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                nextImage();
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/80 border border-gray-100 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              aria-label="Próxima foto"
+              title="Próxima"
+            >
+              <span className="text-lg leading-none">&gt;</span>
+            </button>
+          </>
+        )}
         {brandOverlay && (
           <div className="absolute top-2 left-2 bg-white/90 border border-gray-100 rounded-md px-1.5 py-1 shadow-sm">
             <img src={brandOverlay} alt={product?.brandName || 'Marca'} className="h-6 w-auto object-contain" loading="lazy" />
