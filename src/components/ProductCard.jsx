@@ -342,7 +342,7 @@ const ProductCard = ({ product }) => {
                 e.stopPropagation();
                 prevImage();
               }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              className="absolute inset-y-0 left-2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
               aria-label="Foto anterior"
               title="Anterior"
             >
@@ -355,7 +355,7 @@ const ProductCard = ({ product }) => {
                 e.stopPropagation();
                 nextImage();
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              className="absolute inset-y-0 right-2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
               aria-label="Próxima foto"
               title="Próxima"
             >
