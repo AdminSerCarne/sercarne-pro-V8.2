@@ -235,13 +235,23 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       }
 
       const itemsPayload = buildOrderItemsPayload();
-
+      const clientCnpjRaw = user
+        ? (selectedClient?.cnpj ??
+           selectedClient?.CNPJ ??
+           selectedClient?.client_cnpj ??
+           selectedClient?.cnpjCpf ??
+           selectedClient?.documento ??
+           '')
+        : (guestCnpj ?? '');
+      
+      const clientCnpj = String(clientCnpjRaw).replace(/\D/g, ''); // só dígitos
+      
       const orderData = {
         vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
         vendor_name: user ? (user.usuario || user.nome || 'Vendedor') : 'Cliente Site',
         client_id: user ? (selectedClient.id || selectedClient.cnpj) : 'GUEST',
         client_name: user ? (selectedClient.nomeFantasia || selectedClient.razaoSocial) : guestName,
-        client_cnpj: user ? (selectedClient.cnpj || 'N/A') : (guestCnpj || 'N/A'),
+        client_cnpj: user ? (clientCnpj || 'N/A') : (clientCnpj || 'N/A'),
 
         route_id: deliveryInfo.route_id || 'ROTA_SITE',
         route_name: deliveryInfo.route_name || guestCity,
