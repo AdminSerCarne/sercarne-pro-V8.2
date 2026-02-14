@@ -235,16 +235,25 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       }
 
       const itemsPayload = buildOrderItemsPayload();
-      const clientCnpjRaw = user
-        ? (selectedClient?.cnpj ??
-           selectedClient?.CNPJ ??
-           selectedClient?.client_cnpj ??
-           selectedClient?.cnpjCpf ??
-           selectedClient?.documento ??
-           '')
+
+      
+      const clientDocRaw = user
+        ? (
+            selectedClient?.cnpj ??
+            selectedClient?.cpf ??
+            selectedClient?.CNPJ ??
+            selectedClient?.CPF ??
+            selectedClient?.client_cnpj ??
+            selectedClient?.cnpjCpf ??
+            selectedClient?.cnpj_cpf ??
+            selectedClient?.documento ??
+            selectedClient?.["cnpj/cpf"] ??   // ✅ coluna literal do Sheets
+            selectedClient?.["CNPJ/CPF"] ??   // ✅ variação
+            ''
+          )
         : (guestCnpj ?? '');
       
-      const clientCnpj = String(clientCnpjRaw).replace(/\D/g, ''); // só dígitos
+      const clientDoc = String(clientDocRaw).replace(/\D/g, ''); // só dígitos
 
       console.log('selectedClient:', selectedClient);
       console.log('clientCnpjRaw:', clientCnpjRaw);
@@ -253,9 +262,9 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       const orderData = {
         vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
         vendor_name: user ? (user.usuario || user.nome || 'Vendedor') : 'Cliente Site',
-        client_id: user ? (selectedClient.id || selectedClient.cnpj) : 'GUEST',
+        client_id: user ? (clientDoc || 'CLIENTE') : 'GUEST',
         client_name: user ? (selectedClient.nomeFantasia || selectedClient.razaoSocial) : guestName,
-        client_cnpj: user ? (clientCnpj || 'N/A') : (clientCnpj || 'N/A'),
+        client_cnpj: user ? (clientDoc || 'N/A') : (clientDoc || 'N/A'),
 
         route_id: deliveryInfo.route_id || 'ROTA_SITE',
         route_name: deliveryInfo.route_name || guestCity,
