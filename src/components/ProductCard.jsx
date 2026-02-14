@@ -23,6 +23,7 @@ const ProductCard = ({ product }) => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [weeklyStock, setWeeklyStock] = useState([]);
 
+
   // ✅ NOVO: tick local pra forçar refetch do schedule ao cancelar/reativar no dashboard
   const [stockRefreshTick, setStockRefreshTick] = useState(0);
 
@@ -41,7 +42,9 @@ const ProductCard = ({ product }) => {
   }, [product?.images, product?.imagem]);
 
   const [imgIndex, setImgIndex] = useState(0);
-
+  const touchStartX = React.useRef(0);
+  const touchEndX = React.useRef(0);
+  
   useEffect(() => {
     setImgIndex(0);
   }, [productCodigo]);
@@ -57,6 +60,33 @@ const ProductCard = ({ product }) => {
   const prevImage = () => {
   if (!gallery || gallery.length <= 1) return;
   setImgIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
+  };
+
+  const SWIPE_THRESHOLD = 40; // sensibilidade (px)
+  
+  const onTouchStart = (e) => {
+    if (!gallery || gallery.length <= 1) return;
+    touchStartX.current = e.touches[0].clientX;
+  };
+  
+  const onTouchMove = (e) => {
+    if (!gallery || gallery.length <= 1) return;
+    touchEndX.current = e.touches[0].clientX;
+  };
+  
+  const onTouchEnd = () => {
+    if (!gallery || gallery.length <= 1) return;
+  
+    const deltaX = touchEndX.current - touchStartX.current;
+  
+    // reset
+    touchStartX.current = 0;
+    touchEndX.current = 0;
+  
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+  
+    if (deltaX > 0) prevImage(); // arrastou para a direita
+    else nextImage();            // arrastou para a esquerda
   };
   
   // ✅ Pricing
@@ -338,6 +368,9 @@ const ProductCard = ({ product }) => {
           <>
             <button
               type="button"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
               onClick={(e) => {
                 e.stopPropagation();
                 prevImage();
@@ -351,6 +384,9 @@ const ProductCard = ({ product }) => {
         
             <button
               type="button"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
               onClick={(e) => {
                 e.stopPropagation();
                 nextImage();
