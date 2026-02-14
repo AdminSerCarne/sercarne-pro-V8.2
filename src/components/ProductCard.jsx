@@ -44,6 +44,7 @@ const ProductCard = ({ product }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const touchStartX = React.useRef(0);
   const touchEndX = React.useRef(0);
+  const didSwipeRef = React.useRef(false);
   
   useEffect(() => {
     setImgIndex(0);
@@ -74,7 +75,7 @@ const ProductCard = ({ product }) => {
     touchEndX.current = e.touches[0].clientX;
   };
   
-  const onTouchEnd = () => {
+  const onTouchEnd = (e) => {
     if (!gallery || gallery.length <= 1) return;
   
     const deltaX = touchEndX.current - touchStartX.current;
@@ -85,8 +86,15 @@ const ProductCard = ({ product }) => {
   
     if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
   
-    if (deltaX > 0) prevImage(); // arrastou para a direita
-    else nextImage();            // arrastou para a esquerda
+    // ✅ marca que houve swipe, para bloquear o click que vem depois
+    didSwipeRef.current = true;
+  
+    // ✅ evita que o touch vire click
+    e.preventDefault();
+    e.stopPropagation();
+  
+    if (deltaX > 0) prevImage(); // direita -> anterior
+    else nextImage();            // esquerda -> próxima
   };
   
   // ✅ Pricing
@@ -353,7 +361,18 @@ const ProductCard = ({ product }) => {
       <div className="relative h-[200px] w-full bg-white p-4 flex items-center justify-center border-b border-gray-50 flex-shrink-0">
         <button
           type="button"
-          onClick={nextImage}
+          onClick={(e) => {
+            if (didSwipeRef.current) {
+              didSwipeRef.current = false;
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            nextImage();
+          }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           className="w-full h-full flex items-center justify-center"
           title={gallery.length > 1 ? 'Clique para ver mais fotos' : 'Foto do produto'}
         >
