@@ -368,9 +368,6 @@ const ProductCard = ({ product }) => {
           <>
             <button
               type="button"
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
               onClick={(e) => {
                 e.stopPropagation();
                 prevImage();
@@ -384,9 +381,6 @@ const ProductCard = ({ product }) => {
         
             <button
               type="button"
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
               onClick={(e) => {
                 e.stopPropagation();
                 nextImage();
