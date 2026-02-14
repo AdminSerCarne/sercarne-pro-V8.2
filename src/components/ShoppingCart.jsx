@@ -256,8 +256,8 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       const clientDoc = String(clientDocRaw).replace(/\D/g, ''); // só dígitos
 
       console.log('selectedClient:', selectedClient);
-      console.log('clientCnpjRaw:', clientCnpjRaw);
-      console.log('clientCnpj:', clientCnpj);
+      console.log('clientDocRaw:', clientDocRaw);
+      console.log('clientDoc:', clientDoc);
       
       const orderData = {
         vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
