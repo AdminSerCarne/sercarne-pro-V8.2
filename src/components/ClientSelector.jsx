@@ -144,6 +144,8 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
   const getCity = (c) => c.municipio || c.cidade || c.city || "";
 
   return (
+    console.log('searchTerm=', searchTerm, 'filtered=', filteredClients.length, 'total=', clients.length);
+  
     <div ref={containerRef} className={cn("w-full relative", className)}>
       <Button
         variant="outline"
@@ -211,7 +213,7 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
                      <p>Nenhum cliente encontrado.</p>
                  </div>
              )}
-             console.log('searchTerm=', searchTerm, 'filtered=', filteredClients.length, 'total=', clients.length);
+             
              {filteredClients.map((client) => (
                 <div
                   key={`${client.cnpj}-${client.id || Math.random()}`}
