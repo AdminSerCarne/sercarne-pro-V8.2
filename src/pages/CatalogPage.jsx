@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import ProductCard from '@/components/ProductCard';
@@ -16,8 +16,9 @@ import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 
 const CatalogPage = () => {
   const { user } = useSupabaseAuth();
-  const { notifyStockUpdate, stockUpdateTrigger } = useCart(); // stockUpdateTrigger (se existir no teu context) ajuda a recalcular
+  const { notifyStockUpdate, stockUpdateTrigger } = useCart();
   const { products, loading, error, refreshProducts } = useProducts();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshingStock, setIsRefreshingStock] = useState(false);
 
@@ -25,50 +26,93 @@ const CatalogPage = () => {
   const [stockMapToday, setStockMapToday] = useState({});
   const [loadingSortStock, setLoadingSortStock] = useState(false);
 
-  // Dynamic Header Content
-  const getPageHeaderContent = () => {
+  // ✅ força recálculo do stockMapToday mesmo se products não mudarem
+  const [stockTick, setStockTick] = useState(0);
+
+  // -----------------------------------
+  // Header content
+  // -----------------------------------
+  const headerContent = useMemo(() => {
     if (!user) {
       return {
         title: "Catálogo Público Schlosser",
         subtitle: "Produtos selecionados com qualidade premium para você.",
       };
     }
-
     return {
       title: "Portal do Cliente",
       subtitle: `Bem-vindo, ${user.usuario || 'Cliente'}.`,
     };
-  };
+  }, [user]);
 
-  const headerContent = getPageHeaderContent();
+  // -----------------------------------
+  // ✅ Centraliza “recalcular estoque”
+  // - notifica context
+  // - refaz produtos (recalcula available_today)
+  // - força stockMapToday refazer
+  // -----------------------------------
+  const triggerFullStockRefresh = useCallback(() => {
+    try { notifyStockUpdate?.(); } catch (e) {}
+    try { refreshProducts?.(); } catch (e) {}
 
+    // força o efeito do stockMapToday rodar
+    setStockTick(Date.now());
+  }, [notifyStockUpdate, refreshProducts]);
+
+  // -----------------------------------
+  // Realtime: pedidos mudaram => refaz estoque
+  // -----------------------------------
   useEffect(() => {
-    // Prevent infinite loop by only creating subscription once
     const channel = supabase
       .channel('public:pedidos_stock_tracker')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'pedidos' },
-        () => {
-          notifyStockUpdate();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+        // pequena “segurada” pra evitar rajadas
+        setTimeout(() => {
+          triggerFullStockRefresh();
+        }, 150);
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [triggerFullStockRefresh]);
 
+  // -----------------------------------
+  // ✅ Ouve o evento disparado pelo Dashboard (CANCELAR/REATIVAR etc)
+  // -----------------------------------
+  useEffect(() => {
+    const onUpdate = () => triggerFullStockRefresh();
+
+    const onStorage = (e) => {
+      if (e.key === 'schlosser_stock_update') onUpdate();
+    };
+
+    window.addEventListener('schlosser:stock-updated', onUpdate);
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('schlosser:stock-updated', onUpdate);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [triggerFullStockRefresh]);
+
+  // -----------------------------------
+  // Manual refresh
+  // -----------------------------------
   const handleManualRefresh = () => {
     setIsRefreshingStock(true);
-    notifyStockUpdate();
-    refreshProducts();
-    setTimeout(() => setIsRefreshingStock(false), 1000);
+    triggerFullStockRefresh();
+    setTimeout(() => setIsRefreshingStock(false), 800);
   };
 
+  // -----------------------------------
   // ✅ CAP 5: calcular disponibilidade HOJE em lote
+  // roda quando:
+  // - products muda
+  // - stockUpdateTrigger muda (seu context)
+  // - stockTick muda (evento / realtime / manual)
+  // -----------------------------------
   useEffect(() => {
     const run = async () => {
       if (!products || products.length === 0) {
@@ -80,14 +124,11 @@ const CatalogPage = () => {
         setLoadingSortStock(true);
         const todayStr = new Date().toISOString().split('T')[0];
 
-        // lista de códigos visíveis
         const codes = products
           .map(p => String(p.codigo || '').trim())
           .filter(Boolean);
 
-        // batelada (1 chamada)
         const map = await getAvailableStockForDateBatch(codes, todayStr);
-
         setStockMapToday(map || {});
       } catch (e) {
         console.warn('[CatalogPage] Falha ao montar stockMapToday, usando fallback estoque_und', e);
@@ -98,33 +139,30 @@ const CatalogPage = () => {
     };
 
     run();
-    // ⚠️ Recalcula quando o catálogo muda e quando o sistema avisa “estoque mudou”
-  }, [products, stockUpdateTrigger]);
+  }, [products, stockUpdateTrigger, stockTick]);
 
-  // Memoized Filter & Sort Logic
+  // -----------------------------------
+  // Filter + Sort
+  // -----------------------------------
   const filteredAndSortedProducts = useMemo(() => {
-    // 1. Filter by search term
+    const term = String(searchTerm || '').toLowerCase();
+
     const filtered = (products || []).filter(p =>
       (p.codigo && String(p.codigo).includes(searchTerm)) ||
-      (p.descricao && p.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
+      (p.descricao && String(p.descricao).toLowerCase().includes(term))
     );
 
-    // 2. Sort by Stock Descending (CAP 5)
     const sorted = [...filtered].sort((a, b) => {
       const codeA = String(a.codigo || '').trim();
       const codeB = String(b.codigo || '').trim();
 
-      // ✅ estoque disponível HOJE (base + entradas - pedidos)
       const stockA = Number(stockMapToday?.[codeA]);
       const stockB = Number(stockMapToday?.[codeB]);
 
-      // fallback seguro se mapa não carregou ainda
       const safeA = !isNaN(stockA) ? stockA : Number(a.estoque_und || 0);
       const safeB = !isNaN(stockB) ? stockB : Number(b.estoque_und || 0);
 
       if (safeB !== safeA) return safeB - safeA;
-
-      // desempate: código asc
       return String(a.codigo || '').localeCompare(String(b.codigo || ''));
     });
 
@@ -137,10 +175,8 @@ const CatalogPage = () => {
         <title>Catálogo - Schlosser</title>
       </Helmet>
 
-      {/* Hero Banner Component */}
       <CatalogBanner />
 
-      {/* Conditional Header Content */}
       <div className="relative z-10 -mt-20 md:-mt-32 flex flex-col items-center text-center px-4 mb-8 pointer-events-none">
         {!user && (
           <>
@@ -155,7 +191,6 @@ const CatalogPage = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 pb-20">
-        {/* B2B Exclusive Title Section (Only for Logged In Users) */}
         {user && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -172,13 +207,13 @@ const CatalogPage = () => {
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <p className="text-gray-400 text-sm md:text-base font-light">
-                Preços e condições especiais liberadas para <span className="text-white font-medium">{user.usuario}</span>
+                Preços e condições especiais liberadas para{' '}
+                <span className="text-white font-medium">{user.usuario}</span>
               </p>
             </div>
           </motion.div>
         )}
 
-        {/* Controls Bar */}
         <div className="bg-[#121212] p-6 rounded-xl shadow-2xl border border-white/10 mb-8 backdrop-blur-sm pointer-events-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
