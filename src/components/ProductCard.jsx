@@ -45,6 +45,7 @@ const ProductCard = ({ product }) => {
   const touchStartX = React.useRef(0);
   const touchEndX = React.useRef(0);
   const didSwipeRef = React.useRef(false);
+  const [slideDir, setSlideDir] = useState('next'); // 'next' | 'prev'
   
   useEffect(() => {
     setImgIndex(0);
@@ -55,12 +56,14 @@ const ProductCard = ({ product }) => {
 
   const nextImage = () => {
     if (!gallery || gallery.length <= 1) return;
+    setSlideDir('next');
     setImgIndex((prev) => (prev + 1) % gallery.length);
   };
   
   const prevImage = () => {
-  if (!gallery || gallery.length <= 1) return;
-  setImgIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
+    if (!gallery || gallery.length <= 1) return;
+    setSlideDir('prev');
+    setImgIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
   };
 
   const SWIPE_THRESHOLD = 40; // sensibilidade (px)
@@ -377,9 +380,12 @@ const ProductCard = ({ product }) => {
           title={gallery.length > 1 ? 'Clique para ver mais fotos' : 'Foto do produto'}
         >
           <img
+            key={imgIndex}
             src={displayImage}
             alt={product?.descricao || 'Produto'}
-            className="h-full w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-105"
+            className={`h-full w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-105 ${
+              slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
+            }`}
             loading="lazy"
           />
         </button>
