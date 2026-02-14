@@ -144,8 +144,6 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
   const getCity = (c) => c.municipio || c.cidade || c.city || "";
 
   return (
-    console.log('searchTerm=', searchTerm, 'filtered=', filteredClients.length, 'total=', clients.length);
-  
     <div ref={containerRef} className={cn("w-full relative", className)}>
       <Button
         variant="outline"
