@@ -15,7 +15,7 @@ const Footer = () => {
                  <img src={LOGO_URL} alt="Schlosser" className="h-14 w-auto" />
               </div>
             </Link>
-            <p className="text-sm leading-relaxed text-gray-500">Frigorífico da carne gaúcha, Especialista em prestação de serviço de desossa em cortes embalados para maior rentabilidade dos clientes. Excelência em cortes nobres e distribuição logística de ponta a ponta.</p>
+            <p className="text-sm leading-relaxed text-gray-500 text-justify">Frigorífico da carne gaúcha, Especialista em prestação de serviço de desossa em cortes embalados para maior rentabilidade dos clientes. Excelência em cortes nobres e distribuição logística de ponta a ponta.</p>
             <div className="flex space-x-4 z-20">
               <a
                 href="https://www.instagram.com/frigorificoschlosser"
