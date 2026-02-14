@@ -239,22 +239,22 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       
       const clientDocRaw = user
         ? (
-            selectedClient?.cnpj ??
-            selectedClient?.cpf ??
-            selectedClient?.CNPJ ??
-            selectedClient?.CPF ??
-            selectedClient?.client_cnpj ??
-            selectedClient?.cnpjCpf ??
-            selectedClient?.cnpj_cpf ??
-            selectedClient?.documento ??
-            selectedClient?.["cnpj/cpf"] ??   // ✅ coluna literal do Sheets
-            selectedClient?.["CNPJ/CPF"] ??   // ✅ variação
-            selectedClient?.razaoSocial ??
+            selectedClient?.cnpj ||
+            selectedClient?.cpf ||
+            selectedClient?.CNPJ ||
+            selectedClient?.CPF ||
+            selectedClient?.client_cnpj ||
+            selectedClient?.cnpjCpf ||
+            selectedClient?.cnpj_cpf ||
+            selectedClient?.documento ||
+            selectedClient?.["cnpj/cpf"] ||
+            selectedClient?.["CNPJ/CPF"] ||
+            selectedClient?.razaoSocial ||   // ✅ no seu caso está vindo aqui
             ''
           )
-        : (guestCnpj ?? '');
+        : (guestCnpj || '');
       
-      const clientDoc = String(clientDocRaw).replace(/\D/g, ''); // só dígitos
+      const clientDoc = String(clientDocRaw).replace(/\D/g, '');
 
       console.log('selectedClient:', selectedClient);
       console.log('clientDocRaw:', clientDocRaw);
