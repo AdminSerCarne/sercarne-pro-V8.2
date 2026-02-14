@@ -1,13 +1,14 @@
-// src/pages/VendorDashboard.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import {
   CheckCircle,
   Truck,
@@ -23,11 +24,13 @@ import {
   AlertCircle,
   RotateCcw
 } from 'lucide-react';
+
 import { format, isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+
 import PrintOrderModal from '@/components/PrintOrderModal';
 import OrderDetailsModal from '@/components/OrderDetailsModal';
 import WhatsAppShare from '@/components/WhatsAppShare';
-import { useToast } from '@/components/ui/use-toast';
 
 const VendorDashboard = () => {
   const { user } = useSupabaseAuth();
@@ -46,19 +49,10 @@ const VendorDashboard = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
-  const formatMoney = (val) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
-
-  const normalizeStatus = (s) => String(s || '').toUpperCase().trim();
-
-  const dispatchStockUpdated = () => {
-    try {
-      localStorage.setItem('schlosser_stock_update', String(Date.now()));
-      window.dispatchEvent(new Event('schlosser:stock-updated'));
-    } catch (e) {}
-  };
-
-  const fetchOrders = async () => {
+  // -----------------------------------------
+  // Fetch
+  // -----------------------------------------
+  const fetchOrders = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
@@ -69,56 +63,91 @@ const VendorDashboard = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+
+      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Error fetching orders:', err);
+      console.error('[VendorDashboard] fetchOrders error:', err);
       toast({ title: 'Erro ao carregar pedidos', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, toast]);
 
   useEffect(() => {
     fetchOrders();
+  }, [fetchOrders]);
+
+  // -----------------------------------------
+  // Real-time sync (mais robusto)
+  // -----------------------------------------
+  useEffect(() => {
+    if (!user) return;
 
     const channel = supabase
-      .channel('dashboard_updates_vendor')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, (payload) => {
-        // evita “piscadas” quando eu mesmo cliquei e já atualizei otimista
-        const incoming = payload?.new;
-        if (!incoming?.id) return;
-        if (incoming.id === processingId) return;
+      .channel('vendor_dashboard_updates_v2')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pedidos' },
+        (payload) => {
+          const row = payload?.new;
+          const old = payload?.old;
 
-        setOrders((current) => {
-          const exists = current.find((o) => o.id === incoming.id);
-          if (exists) return current.map((o) => (o.id === incoming.id ? incoming : o));
-          return [incoming, ...current];
-        });
-      })
+          // DELETE
+          if (payload.eventType === 'DELETE' && old?.id) {
+            setOrders((curr) => curr.filter((o) => o.id !== old.id));
+            return;
+          }
+
+          // INSERT / UPDATE
+          if (!row?.id) return;
+
+          setOrders((curr) => {
+            const idx = curr.findIndex((o) => o.id === row.id);
+
+            // Se não existe ainda: adiciona no topo
+            if (idx === -1) return [row, ...curr];
+
+            // Evita sobrescrever com evento atrasado:
+            const existing = curr[idx];
+            const existingTs = existing?.updated_at || existing?.created_at || '';
+            const incomingTs = row?.updated_at || row?.created_at || '';
+
+            // Se tiver timestamps e o incoming parecer mais velho, ignora
+            if (existingTs && incomingTs && String(incomingTs) < String(existingTs)) {
+              return curr;
+            }
+
+            const copy = [...curr];
+            copy[idx] = row;
+            return copy;
+          });
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]); // não incluir processingId para não re-subscrever
+  }, [user]);
 
+  // -----------------------------------------
+  // Filters
+  // -----------------------------------------
   const filteredOrders = useMemo(() => {
-    let result = [...orders];
+    let result = [...(orders || [])];
 
     if (statusFilter !== 'todos') {
-      result = result.filter(
-        (order) => normalizeStatus(order.status) === normalizeStatus(statusFilter)
-      );
+      const sf = statusFilter.toUpperCase();
+      result = result.filter((order) => String(order.status || '').toUpperCase() === sf);
     }
 
     if (clientFilter) {
       const term = clientFilter.toLowerCase();
-      result = result.filter(
-        (order) =>
-          (order.client_name && String(order.client_name).toLowerCase().includes(term)) ||
-          (order.id && String(order.id).toLowerCase().includes(term))
-      );
+      result = result.filter((order) => {
+        const client = String(order.client_name || '').toLowerCase();
+        const id = String(order.id || '').toLowerCase();
+        return client.includes(term) || id.includes(term);
+      });
     }
 
     if (dateFilter !== 'all') {
@@ -134,16 +163,14 @@ const VendorDashboard = () => {
     return result;
   }, [orders, statusFilter, dateFilter, clientFilter]);
 
-  const stats = useMemo(() => {
-    const total = orders.length;
-    const pendentes = orders.filter((o) => normalizeStatus(o.status) === 'PENDENTE').length;
-    const totalVendido = orders.reduce((acc, curr) => acc + (Number(curr.total_value) || 0), 0);
-    return { total, pendentes, totalVendido };
-  }, [orders]);
+  // -----------------------------------------
+  // Helpers UI
+  // -----------------------------------------
+  const formatMoney = (val) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
 
   const getStatusBadge = (status) => {
-    const s = normalizeStatus(status) || 'PENDENTE';
-
+    const s = String(status || 'PENDENTE').toUpperCase();
     switch (s) {
       case 'PENDENTE':
         return (
@@ -157,64 +184,79 @@ const VendorDashboard = () => {
             Confirmado
           </Badge>
         );
-      case 'CANCELADO':
-        return (
-          <Badge className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20">
-            Cancelado
-          </Badge>
-        );
       case 'ENTREGUE':
         return (
           <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20">
             Entregue
           </Badge>
         );
+      case 'CANCELADO':
+        return (
+          <Badge className="bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20">
+            Cancelado
+          </Badge>
+        );
       default:
         return (
-          <Badge variant="outline" className="text-gray-400 border-white/10">
-            {s}
+          <Badge variant="outline" className="text-gray-400">
+            {status}
           </Badge>
         );
     }
   };
 
-  const updateStatus = async (order, newStatus, toastStyle) => {
-    setProcessingId(order.id);
+  // -----------------------------------------
+  // ✅ Status update (sem “toggle” perigoso)
+  // -----------------------------------------
+  const updateOrderStatus = async (order, newStatus) => {
+    if (!order?.id) return;
 
-    // optimistic update
-    const previousOrders = [...orders];
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o)));
+    const id = order.id;
+    const prevOrders = [...orders];
+
+    setProcessingId(id);
+
+    // Optimistic
+    setOrders((curr) => curr.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
 
     try {
-      const { error } = await supabase.from('pedidos').update({ status: newStatus }).eq('id', order.id);
+      const { error } = await supabase
+        .from('pedidos')
+        .update({ status: newStatus })
+        .eq('id', id);
+
       if (error) throw error;
 
       toast({
         title: 'Status atualizado!',
-        description: `Pedido #${order.id.slice(0, 8)} agora está ${newStatus}`,
-        className: toastStyle
+        description: `Pedido #${String(id).slice(0, 8).toUpperCase()} agora está ${newStatus}`,
+        className:
+          newStatus === 'CONFIRMADO'
+            ? 'bg-green-800 text-white'
+            : newStatus === 'CANCELADO'
+            ? 'bg-red-700 text-white'
+            : 'bg-yellow-600 text-white',
       });
 
-      // 🔥 importante: avisa o catálogo para recalcular estoque
-      dispatchStockUpdated();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      setOrders(previousOrders);
+      // 🔥 Resync do banco (evita “voltar sozinho” por fetch/real-time)
+      await fetchOrders();
+    } catch (err) {
+      console.error('[VendorDashboard] update status error:', err);
+
+      // Reverte se falhar
+      setOrders(prevOrders);
+
       toast({
         title: 'Erro ao atualizar',
-        description: 'Não foi possível alterar o status.',
-        variant: 'destructive'
+        description:
+          err?.message ||
+          'Não foi possível alterar o status. Verifique RLS/permissões no Supabase.',
+        variant: 'destructive',
       });
     } finally {
       setProcessingId(null);
     }
   };
-
-  const handleConfirm = (order) => updateStatus(order, 'CONFIRMADO', 'bg-green-800 text-white');
-
-  const handleCancel = (order) => updateStatus(order, 'CANCELADO', 'bg-red-700 text-white');
-
-  const handleReactivate = (order) => updateStatus(order, 'CONFIRMADO', 'bg-green-800 text-white');
 
   const handlePrint = (order) => {
     setSelectedOrder(order);
@@ -225,6 +267,13 @@ const VendorDashboard = () => {
     setSelectedOrder(order);
     setIsDetailsModalOpen(true);
   };
+
+  // -----------------------------------------
+  // Stats
+  // -----------------------------------------
+  const totalOrders = orders.length;
+  const totalPendentes = orders.filter((o) => String(o.status || '').toUpperCase() === 'PENDENTE').length;
+  const totalVendido = orders.reduce((acc, curr) => acc + (Number(curr.total_value) || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8 font-sans">
@@ -260,7 +309,7 @@ const VendorDashboard = () => {
               <Clock className="h-4 w-4 text-[#FF6B35]" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
+              <div className="text-2xl font-bold">{totalOrders}</div>
             </CardContent>
           </Card>
 
@@ -270,7 +319,7 @@ const VendorDashboard = () => {
               <AlertCircle className="h-4 w-4 text-yellow-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-500">{stats.pendentes}</div>
+              <div className="text-2xl font-bold text-yellow-500">{totalPendentes}</div>
             </CardContent>
           </Card>
 
@@ -280,7 +329,7 @@ const VendorDashboard = () => {
               <CheckCircle className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-500">{formatMoney(stats.totalVendido)}</div>
+              <div className="text-2xl font-bold text-green-500">{formatMoney(totalVendido)}</div>
             </CardContent>
           </Card>
         </div>
@@ -299,7 +348,7 @@ const VendorDashboard = () => {
             </div>
           </div>
 
-          <div className="flex gap-4 flex-wrap">
+          <div className="flex gap-4">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px] bg-[#0a0a0a] border-white/10 text-white">
                 <Filter className="w-4 h-4 mr-2 text-gray-400" />
@@ -314,7 +363,7 @@ const VendorDashboard = () => {
             </Select>
 
             <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="w-[180px] bg-[#0a0a0a] border-white/10 text-white">
+              <SelectTrigger className="w-[170px] bg-[#0a0a0a] border-white/10 text-white">
                 <Calendar className="w-4 h-4 mr-2 text-gray-400" />
                 <SelectValue placeholder="Período" />
               </SelectTrigger>
@@ -346,25 +395,22 @@ const VendorDashboard = () => {
               <tbody className="divide-y divide-white/5">
                 {filteredOrders.length > 0 ? (
                   filteredOrders.map((order) => {
-                    const st = normalizeStatus(order.status) || 'PENDENTE';
-                    const isProcessing = processingId === order.id;
+                    const statusUpper = String(order.status || '').toUpperCase();
+                    const isBusy = processingId === order.id;
 
                     return (
                       <tr key={order.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 font-mono text-gray-300">#{order.id.slice(0, 8).toUpperCase()}</td>
-
-                        <td className="px-6 py-4 font-medium text-white">{order.client_name}</td>
-
-                        <td className="px-6 py-4 text-gray-400">
-                          {order.created_at ? format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm') : '-'}
+                        <td className="px-6 py-4 font-mono text-gray-300">
+                          #{String(order.id).slice(0, 8).toUpperCase()}
                         </td>
-
+                        <td className="px-6 py-4 font-medium text-white">{order.client_name}</td>
+                        <td className="px-6 py-4 text-gray-400">
+                          {order.created_at ? format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm') : '--'}
+                        </td>
                         <td className="px-6 py-4 text-right font-bold text-[#FF6B35]">
                           {formatMoney(order.total_value)}
                         </td>
-
-                        <td className="px-6 py-4 text-center">{getStatusBadge(st)}</td>
-
+                        <td className="px-6 py-4 text-center">{getStatusBadge(order.status)}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
                             <Button
@@ -392,49 +438,56 @@ const VendorDashboard = () => {
                               className="h-9 w-9 p-0 text-gray-400 hover:text-green-500 hover:bg-green-500/10 rounded-md transition-colors flex items-center justify-center"
                             />
 
-                            {/* Confirmar (PENDENTE -> CONFIRMADO) */}
-                            {st === 'PENDENTE' && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={isProcessing}
-                                onClick={() => handleConfirm(order)}
-                                className="text-gray-400 hover:text-green-500 hover:bg-white/10"
-                                title="Confirmar Pedido"
-                              >
-                                {isProcessing ? <RefreshCw className="animate-spin w-4 h-4" /> : <Check size={18} />}
-                              </Button>
-                            )}
+                            {/* CONFIRMAR */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={isBusy || statusUpper === 'CONFIRMADO'}
+                              onClick={() => updateOrderStatus(order, 'CONFIRMADO')}
+                              className="text-gray-400 hover:text-green-500 hover:bg-white/10 disabled:opacity-30"
+                              title="Confirmar (entra no comprometido)"
+                            >
+                              {isBusy && statusUpper !== 'CONFIRMADO' ? (
+                                <RefreshCw className="animate-spin w-4 h-4" />
+                              ) : (
+                                <Check size={18} />
+                              )}
+                            </Button>
 
-                            {/* Cancelar (PENDENTE/CONFIRMADO -> CANCELADO) */}
-                            {(st === 'PENDENTE' || st === 'CONFIRMADO') && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={isProcessing}
-                                onClick={() => handleCancel(order)}
-                                className="text-gray-400 hover:text-red-500 hover:bg-white/10"
-                                title="Cancelar Pedido"
-                              >
-                                {isProcessing ? <RefreshCw className="animate-spin w-4 h-4" /> : <X size={18} />}
-                              </Button>
-                            )}
+                            {/* VOLTAR PRA PENDENTE */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={isBusy || statusUpper === 'PENDENTE'}
+                              onClick={() => updateOrderStatus(order, 'PENDENTE')}
+                              className="text-gray-400 hover:text-yellow-500 hover:bg-white/10 disabled:opacity-30"
+                              title="Voltar para PENDENTE"
+                            >
+                              <AlertCircle size={18} />
+                            </Button>
 
-                            {/* Reativar (CANCELADO -> CONFIRMADO) */}
-                            {st === 'CANCELADO' && (
+                            {/* CANCELAR / REATIVAR */}
+                            {statusUpper === 'CANCELADO' ? (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                disabled={isProcessing}
-                                onClick={() => handleReactivate(order)}
+                                disabled={isBusy}
+                                onClick={() => updateOrderStatus(order, 'CONFIRMADO')}
                                 className="text-gray-400 hover:text-green-500 hover:bg-white/10"
                                 title="Reativar (volta a CONFIRMADO)"
                               >
-                                {isProcessing ? (
-                                  <RefreshCw className="animate-spin w-4 h-4" />
-                                ) : (
-                                  <RotateCcw size={18} />
-                                )}
+                                <RotateCcw size={18} />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                disabled={isBusy}
+                                onClick={() => updateOrderStatus(order, 'CANCELADO')}
+                                className="text-gray-400 hover:text-red-400 hover:bg-white/10"
+                                title="Cancelar (devolve estoque)"
+                              >
+                                <X size={18} />
                               </Button>
                             )}
                           </div>
@@ -453,12 +506,15 @@ const VendorDashboard = () => {
             </table>
           </div>
 
-          {/* Se teu mobile list existe em outro arquivo, deixa como está.
-              Se não existir, pode ignorar — não quebra nada. */}
+          {/* Mobile list (se quiser, eu te mando também completo) */}
         </div>
       </div>
 
-      <PrintOrderModal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} order={selectedOrder} />
+      <PrintOrderModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        order={selectedOrder}
+      />
 
       <OrderDetailsModal
         isOpen={isDetailsModalOpen}
