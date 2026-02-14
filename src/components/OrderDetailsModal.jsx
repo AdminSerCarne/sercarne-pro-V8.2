@@ -10,6 +10,23 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
   
   const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+
+  const formatCpfCnpj = (value) => {
+    const digits = String(value || '').replace(/\D/g, '');
+  
+    if (digits.length === 11) {
+      // CPF: 000.000.000-00
+      return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    }
+  
+    if (digits.length === 14) {
+      // CNPJ: 00.000.000/0000-00
+      return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+  
+    return value || '';
+  };
+    
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl bg-[#121212] border border-white/10 text-white shadow-2xl">
@@ -39,7 +56,17 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
                         <User size={14} className="text-[#FF6B35]"/> Cliente
                     </h3>
                     <p className="font-bold text-lg">{order.client_name}</p>
-                    <p className="text-gray-500 text-sm font-mono mt-1">CNPJ: {order.client_cnpj || 'N/A'}</p>
+                    {(() => {
+                        const docDigits = String(order?.client_cnpj || '').replace(/\D/g, '');
+                        const label = docDigits.length === 11 ? 'CPF' : 'CNPJ';
+                        const formatted = formatCpfCnpj(docDigits);
+                      
+                        return (
+                          <p className="text-gray-500 text-sm font-mono mt-1">
+                            {label}: {formatted || 'N/A'}
+                          </p>
+                        );
+                      })()}
                 </div>
                 
                 <div className="bg-[#1a1a1a] p-4 rounded-lg border border-white/5">
