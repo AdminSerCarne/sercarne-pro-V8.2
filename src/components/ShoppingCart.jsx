@@ -27,40 +27,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { schlosserApi } from '@/services/schlosserApi';
 
-/**
- * Helper: força YYYY-MM-DD
- * Aceita Date, ISO, YYYY-MM-DD, string “qualquer” parseável.
- */
-const toYMD = (raw) => {
-  if (!raw) return null;
-
-  if (raw instanceof Date) {
-    if (Number.isNaN(raw.getTime())) return null;
-    return raw.toISOString().split('T')[0];
-  }
-
-  const s = String(raw).trim();
-  if (!s) return null;
-  if (s.includes('T')) return s.split('T')[0];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-  const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().split('T')[0];
-
-  return null;
-};
-
-/**
- * Helper: cria Date “seguro” (00:00 local) a partir de YYYY-MM-DD
- * Evita bug de timezone quando faz new Date('YYYY-MM-DD')
- */
-const ymdToLocalDate = (ymd) => {
-  if (!ymd) return null;
-  const [y, m, d] = String(ymd).split('-').map(n => Number(n));
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d, 0, 0, 0, 0);
-};
-
 const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const {
     cartItems,
@@ -106,9 +72,17 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const isDiscountReached = totalQuantity >= DISCOUNT_THRESHOLD;
   const unitsToDiscount = Math.max(0, DISCOUNT_THRESHOLD - totalQuantity);
 
+  const normalizeDateToISO = (dateLike) => {
+    if (!dateLike) return '';
+    // já vem "YYYY-MM-DD" do selector normalmente
+    if (typeof dateLike === 'string') return dateLike.split('T')[0];
+    const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+    if (isNaN(d.getTime())) return String(dateLike).split('T')[0];
+    return d.toISOString().split('T')[0];
+  };
+
   const refreshStockValidation = async () => {
-    const dateStr = toYMD(deliveryInfo?.delivery_date);
-    if (!dateStr) {
+    if (!deliveryInfo?.delivery_date) {
       setValidationStatuses({});
       return;
     }
@@ -120,21 +94,17 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
 
     setIsRefreshingStock(true);
 
-    try {
-      const statuses = {};
-      const dateObj = ymdToLocalDate(dateStr);
+    const statuses = {};
+    const dateObj = new Date(deliveryInfo.delivery_date);
 
-      for (const item of cartItems) {
-        const result = await schlosserApi.calculateAvailableStock(item.codigo, dateObj);
-        const available = Number(result?.availableStock ?? 0);
-        const isValid = available >= Number(item?.quantidade || 0);
-        statuses[item.codigo] = { isValid, available };
-      }
-
-      setValidationStatuses(statuses);
-    } finally {
-      setIsRefreshingStock(false);
+    for (const item of cartItems) {
+      const result = await schlosserApi.calculateAvailableStock(item.codigo, dateObj);
+      const isValid = result.availableStock >= item.quantidade;
+      statuses[item.codigo] = { isValid, available: result.availableStock };
     }
+
+    setValidationStatuses(statuses);
+    setIsRefreshingStock(false);
   };
 
   useEffect(() => {
@@ -153,18 +123,53 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         route_name: route.descricao_grupo_rota,
         delivery_city: route.municipio,
         cutoff: route.corte_ate,
-        delivery_date: null // reseta data ao trocar rota
-      }));
-    } else {
-      setDeliveryInfo(prev => ({
-        ...prev,
-        route_id: '',
-        route_name: '',
-        delivery_city: '',
-        cutoff: '',
         delivery_date: null
       }));
+    } else {
+      setDeliveryInfo(prev => ({ ...prev, route_id: '', delivery_date: null }));
     }
+  };
+
+  const buildOrderItemsPayload = () => {
+    // ✅ Aqui é a correção que resolve “peso/valor zerado” no WhatsApp/Print:
+    // Gravamos nos itens os campos esperados pelo calculateOrderMetrics + os campos legados.
+    return (processedItems || []).map(i => {
+      const codigo = String(i.codigo || i.sku || '').trim();
+
+      const quantity = Number(i.quantity || 0);
+      const unitType = String(i.unitType || 'UND').toUpperCase();
+
+      const pricePerKg = Number(i.pricePerKg || 0);
+      const pesoMedio = Number(i.averageWeight || i.pesoMedio || 0);
+
+      const estimatedWeight = Number(i.estimatedWeight || 0);
+      const estimatedValue = Number(i.estimatedValue || 0);
+
+      const name = i.name || i.descricao || 'Produto';
+
+      return {
+        // chaves “do app” (usadas por WhatsAppShare / Print quando recalcula)
+        codigo,
+        sku: codigo,
+        name,
+        descricao: name,
+        quantidade: quantity,
+        quantity,
+        unitType,
+        pricePerKg,
+        pesoMedio,
+        averageWeight: pesoMedio,
+        estimatedWeight,
+        estimatedValue,
+
+        // chaves “legadas” (já estava salvando — mantemos por compatibilidade)
+        quantity_unit: quantity,
+        unit_type: unitType,
+        price_per_kg: pricePerKg,
+        total_weight: estimatedWeight,
+        total_value: estimatedValue,
+      };
+    });
   };
 
   const handleConfirmOrderClick = async () => {
@@ -176,7 +181,6 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         return;
       }
 
-      // Basic validation
       if (user && !selectedClient) {
         toast({ variant: "destructive", title: "Selecione um cliente" });
         return;
@@ -191,8 +195,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         return;
       }
 
-      const deliveryDateStr = toYMD(deliveryInfo?.delivery_date);
-      if (!deliveryDateStr) {
+      if (!deliveryInfo?.delivery_date) {
         toast({ variant: "destructive", title: "Selecione uma data de entrega" });
         return;
       }
@@ -202,18 +205,15 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         return;
       }
 
-      // Stock Validation (na data escolhida)
+      // Stock Validation
       const insufficientItems = [];
-      const dateObj = ymdToLocalDate(deliveryDateStr);
-
       for (const item of cartItems) {
-        const result = await schlosserApi.calculateAvailableStock(item.codigo, dateObj);
-        const available = Number(result?.availableStock ?? 0);
-        if (available < Number(item?.quantidade || 0)) {
+        const result = await schlosserApi.calculateAvailableStock(item.codigo, new Date(deliveryInfo.delivery_date));
+        if (result.availableStock < item.quantidade) {
           insufficientItems.push({
             descricao: item.descricao,
-            needed: Number(item?.quantidade || 0),
-            available
+            needed: item.quantidade,
+            available: result.availableStock
           });
         }
       }
@@ -234,71 +234,30 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         return;
       }
 
-      /**
-       * 🔥 CORREÇÃO PRINCIPAL DO “peso/valor zerado no WhatsApp”:
-       * Salvar os itens também com os nomes que o calculateOrderMetrics/formatter entende:
-       * quantity, unitType, pricePerKg, averageWeight, estimatedWeight, estimatedValue
-       * + manter os campos “snake_case” que você já usa.
-       */
-      const itemsForDb = (processedItems || []).map(i => {
-        const quantity = Number(i.quantity ?? i.quantidade ?? 0);
-        const estimatedWeight = Number(i.estimatedWeight ?? i.total_weight ?? 0);
-        const avg = Number.isFinite(quantity) && quantity > 0 ? (estimatedWeight / quantity) : Number(i.averageWeight ?? 0);
-
-        return {
-          // ids / descrição
-          codigo: i.codigo,
-          sku: i.sku || i.codigo,
-          descricao: i.name || i.descricao || '',
-          name: i.name || i.descricao || '',
-
-          // padrão “compatível”
-          quantity,
-          unitType: i.unitType,
-          pricePerKg: Number(i.pricePerKg ?? 0),
-          averageWeight: Number.isFinite(avg) ? avg : 0,
-          estimatedWeight: Number(estimatedWeight || 0),
-          estimatedValue: Number(i.estimatedValue ?? 0),
-
-          // padrão “snake_case” (mantém compatibilidade)
-          quantity_unit: quantity,
-          unit_type: i.unitType,
-          price_per_kg: Number(i.pricePerKg ?? 0),
-          total_weight: Number(estimatedWeight || 0),
-          total_value: Number(i.estimatedValue ?? 0),
-
-          // opcional (pra telas antigas)
-          quantidade: quantity,
-          pesoMedio: Number.isFinite(avg) ? avg : 0
-        };
-      });
+      const itemsPayload = buildOrderItemsPayload();
 
       const orderData = {
         vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
         vendor_name: user ? (user.usuario || user.nome || 'Vendedor') : 'Cliente Site',
-
         client_id: user ? (selectedClient.id || selectedClient.cnpj) : 'GUEST',
-        client_name: user
-          ? (selectedClient.nomeFantasia || selectedClient.razaoSocial)
-          : guestName,
+        client_name: user ? (selectedClient.nomeFantasia || selectedClient.razaoSocial) : guestName,
         client_cnpj: user ? (selectedClient.cnpj || 'N/A') : (guestCnpj || 'N/A'),
 
         route_id: deliveryInfo.route_id || 'ROTA_SITE',
         route_name: deliveryInfo.route_name || guestCity,
 
-        // ✅ salva SEMPRE YYYY-MM-DD
-        delivery_date: deliveryDateStr,
-        delivery_city: user
-          ? (deliveryInfo.delivery_city || selectedClient.municipio || selectedClient.cidade)
-          : guestCity,
+        delivery_date: normalizeDateToISO(deliveryInfo.delivery_date),
+        delivery_city: user ? (deliveryInfo.delivery_city || selectedClient.municipio) : guestCity,
         cutoff: deliveryInfo.cutoff || '17:00',
 
-        items: itemsForDb,
+        items: itemsPayload,
 
         total_value: Number(totalValue || 0),
         total_weight: Number(totalWeight || 0),
 
         observations: user ? '' : `Contato: ${guestPhone}`,
+
+        // Vendedor confirma na hora; Site fica pendente
         status: user ? 'CONFIRMADO' : 'PENDENTE'
       };
 
@@ -337,16 +296,12 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
     ? (selectedClient?.municipio || selectedClient?.cidade)
     : guestCity;
 
-  // Driving item for auto-suggestion (pode ser null)
-  const drivingCartItem = (cartItems && cartItems.length > 0)
-    ? {
-        codigo: cartItems[0].codigo,
-        sku: cartItems[0].codigo,
-        quantidade: cartItems[0].quantidade,
-        quantity_unit: cartItems[0].quantidade,
-        ...cartItems[0]
-      }
-    : null;
+  // For automatic suggestions (pode ser null quando carrinho vazio)
+  const drivingCartItem = (cartItems && cartItems.length > 0) ? {
+    sku: cartItems[0].codigo,
+    quantity_unit: cartItems[0].quantidade,
+    ...cartItems[0]
+  } : null;
 
   return (
     <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
@@ -446,12 +401,10 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
           {selectedRoute && (
             <DeliveryDateSelector
               route={selectedRoute}
-              cartItem={drivingCartItem}
+              cartItem={drivingCartItem} // pode ser null quando carrinho vazio
               selectedDate={deliveryInfo?.delivery_date}
               onDateSelect={(date) => {
-                // ✅ sempre salva YYYY-MM-DD
-                const ymd = toYMD(date);
-                setDeliveryInfo(prev => ({ ...prev, delivery_date: ymd }));
+                setDeliveryInfo(prev => ({ ...prev, delivery_date: date }));
               }}
             />
           )}
