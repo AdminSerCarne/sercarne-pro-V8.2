@@ -245,6 +245,10 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         : (guestCnpj ?? '');
       
       const clientCnpj = String(clientCnpjRaw).replace(/\D/g, ''); // só dígitos
+
+      console.log('selectedClient:', selectedClient);
+      console.log('clientCnpjRaw:', clientCnpjRaw);
+      console.log('clientCnpj:', clientCnpj);
       
       const orderData = {
         vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
