@@ -249,6 +249,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
             selectedClient?.documento ??
             selectedClient?.["cnpj/cpf"] ??   // ✅ coluna literal do Sheets
             selectedClient?.["CNPJ/CPF"] ??   // ✅ variação
+            selectedClient?.razaoSocial ??
             ''
           )
         : (guestCnpj ?? '');
