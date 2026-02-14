@@ -188,7 +188,9 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
         )}
         <Search className="ml-2 h-4 w-4 shrink-0 opacity-30 text-gray-500" />
       </Button>
-
+      <div className="text-[10px] text-red-400 px-3 pt-2">
+  DEBUG ClientSelector ATIVO
+</div>
       {isOpen && (
         <div className="absolute top-full left-0 w-full mt-2 z-[50] shadow-2xl border border-gray-700 bg-[#1a1a1a] text-gray-100 rounded-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center border-b border-gray-700 px-3 py-2 bg-[#1a1a1a]">
