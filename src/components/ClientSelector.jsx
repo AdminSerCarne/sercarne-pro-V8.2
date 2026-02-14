@@ -55,15 +55,79 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
     }
   };
 
-  const filteredClients = clients.filter(client => {
-    const query = searchTerm.toLowerCase();
-    const nameMatch = client.nomeFantasia && client.nomeFantasia.toLowerCase().includes(query);
-    const razaoMatch = client.razaoSocial && client.razaoSocial.toLowerCase().includes(query);
-    const cnpjMatch = client.cnpj && client.cnpj.includes(query);
-    const cityMatch = client.municipio && client.municipio.toLowerCase().includes(query);
-    
-    return nameMatch || razaoMatch || cnpjMatch || cityMatch;
-  }).slice(0, 50); // Limit results for performance
+  const formatCpfCnpj = (value) => {
+    const digits = String(value || '').replace(/\D/g, '');
+  
+    if (digits.length === 11) {
+      return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    }
+  
+    if (digits.length === 14) {
+      return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+  
+    return value || '';
+  };
+  // Helpers para normalizar texto (remove acentos) e documento (só dígitos)
+  const normalizeText = (v) =>
+    String(v || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  
+  const getClientName = (c) =>
+    c?.nomeFantasia ||
+    c?.nome_fantasia ||
+    c?.nome ||
+    c?.cliente ||
+    '';
+  
+  const getClientRazao = (c) =>
+    c?.razaoSocial ||
+    c?.razao_social ||
+    '';
+  
+  const getClientCity = (c) =>
+    c?.municipio ||
+    c?.cidade ||
+    c?.city ||
+    '';
+  
+  const getClientDoc = (c) => {
+    const raw =
+      c?.cnpj ||
+      c?.cpf ||
+      c?.['cnpj/cpf'] ||
+      c?.['CNPJ/CPF'] ||
+      c?.cnpj_cpf ||
+      c?.documento ||
+      c?.razaoSocial || ''; // (no seu caso, às vezes o doc vem aqui)
+    return String(raw).replace(/\D/g, '');
+  };
+  
+  const filteredClients = clients
+    .filter((client) => {
+      const q = normalizeText(searchTerm);
+  
+      // se não digitou nada, mostra a lista (limitada)
+      if (!q) return true;
+  
+      const name = normalizeText(getClientName(client));
+      const razao = normalizeText(getClientRazao(client));
+      const city = normalizeText(getClientCity(client));
+  
+      const docDigits = getClientDoc(client);
+      const qDigits = q.replace(/\D/g, ''); // se o usuário digitou números
+  
+      const matchName = name.includes(q);
+      const matchRazao = razao.includes(q);
+      const matchCity = city.includes(q);
+      const matchDoc = qDigits ? docDigits.includes(qDigits) : false;
+  
+      return matchName || matchRazao || matchCity || matchDoc;
+    })
+    .slice(0, 50);
 
   const handleClientSelect = (client) => {
       onSelect(client);
@@ -165,7 +229,17 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
                         {client.nomeFantasia || client.razaoSocial}
                       </span>
                       <div className="flex justify-between text-[11px] text-gray-500 items-center">
-                          <span className="font-mono opacity-80">{client.cnpj}</span>
+                          {(() => {
+                            const doc = getClientDoc(client);
+                            const formatted = formatCpfCnpj(doc);
+                            const label = doc.length === 11 ? 'CPF' : 'CNPJ';
+                          
+                            return (
+                              <span className="font-mono opacity-80">
+                                {formatted ? `${label}: ${formatted}` : '—'}
+                              </span>
+                            );
+                          })()}
                           {getCity(client) && (
                               <span className={cn(
                                   "px-1.5 rounded text-[10px] font-bold border flex items-center gap-1",
