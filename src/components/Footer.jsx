@@ -17,12 +17,35 @@ const Footer = () => {
             </Link>
             <p className="text-sm leading-relaxed text-gray-500">Frigorífico da carne gaúcha, Especialista em prestação de serviço de desossa em cortes embalados para maior rentabilidade dos clientes. Excelência em cortes nobres e distribuição logística de ponta a ponta.</p>
             <div className="flex space-x-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"><Instagram size={18} /></a>
-              <a href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"><Facebook size={18} /></a>
-              <a href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"><Linkedin size={18} /></a>
+              <a
+                href="https://www.instagram.com/frigorificoschlosser/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"
+                aria-label="Instagram"
+              >
+                <Instagram size={18} />
+              </a>
+              <a
+                href="https://www.facebook.com/FrigorificoSchlosser"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"
+                aria-label="Facebook"
+              >
+                <Facebook size={18} />
+              </a>
+              <a
+                href="https://www.linkedin.com/company/frigor%C3%ADficoschlosser/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-[#FF6B35] hover:bg-white/10 transition-all"
+                aria-label="LinkedIn"
+              >
+                <Linkedin size={18} />
+              </a>
             </div>
           </div>
-
           {/* Contact Info */}
           <div className="lg:col-span-2">
             <h3 className="text-white font-serif font-semibold text-lg mb-6 flex items-center gap-2">
