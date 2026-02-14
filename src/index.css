@@ -74,3 +74,17 @@
     color: black !important;
   }
 }
+
+
+@keyframes slideInRight {
+  from { transform: translateX(12px); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-12px); opacity: 0.6; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+.animate-slide-in-right { animation: slideInRight 220ms ease-out; }
+.animate-slide-in-left  { animation: slideInLeft  220ms ease-out; }
