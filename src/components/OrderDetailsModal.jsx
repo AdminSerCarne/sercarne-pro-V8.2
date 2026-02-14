@@ -13,7 +13,7 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
     if (digits.length !== 14) return String(value); // se não tiver 14 dígitos, mostra como vier
     return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   };
-  
+  console.log('ORDER DETAILS:', order);
   const clientCnpjRaw =
     order?.client_cnpj ||
     order?.clientCnpj ||
