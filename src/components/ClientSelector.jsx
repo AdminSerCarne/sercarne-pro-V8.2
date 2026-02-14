@@ -204,7 +204,10 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
             {loading && <Loader2 className="h-4 w-4 animate-spin text-orange-500 ml-2" />}
           </div>
           
-          <div className="max-h-[300px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+          <div
+            key={searchTerm}
+            className="max-h-[300px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
+          >
              {filteredClients.length === 0 && !loading && (
                  <div className="py-8 text-center text-sm text-gray-500 flex flex-col items-center gap-2">
                      <Building className="w-8 h-8 opacity-20" />
@@ -214,10 +217,10 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
              
              {filteredClients.map((client) => (
                 <div
-                  key={`${client.cnpj}-${client.id || Math.random()}`}
+                  key={`${getClientDoc(client) || client?.cnpj || client?.razaoSocial || client?.nomeFantasia || ''}-${client?.id || ''}`}
                   className={cn(
                     "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2.5 text-sm outline-none transition-colors mb-1 last:mb-0 group",
-                    selectedClient?.cnpj === client.cnpj 
+                    getClientDoc(selectedClient) === getClientDoc(client) 
                         ? "bg-orange-900/40 text-orange-100 border border-orange-800/50" 
                         : "hover:bg-[#2a2a2a] hover:text-orange-400 text-gray-300 border border-transparent"
                   )}
@@ -242,7 +245,7 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
                           {getCity(client) && (
                               <span className={cn(
                                   "px-1.5 rounded text-[10px] font-bold border flex items-center gap-1",
-                                  selectedClient?.cnpj === client.cnpj 
+                                  getClientDoc(selectedClient) === getClientDoc(client)
                                     ? "bg-orange-900/60 text-orange-200 border-orange-800"
                                     : "bg-gray-800 text-gray-400 border-gray-700 group-hover:border-orange-500/30"
                               )}>
@@ -252,7 +255,7 @@ const ClientSelector = ({ selectedClient, onSelect, className }) => {
                           )}
                       </div>
                   </div>
-                  {selectedClient?.cnpj === client.cnpj && (
+                  {getClientDoc(selectedClient) === getClientDoc(client) && (
                      <Check className="ml-2 h-4 w-4 text-orange-500 shrink-0" />
                   )}
                 </div>
