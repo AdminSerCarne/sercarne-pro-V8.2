@@ -7,9 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const OrderDetailsModal = ({ isOpen, onClose, order }) => {
   if (!order) return null;
-  console.log('selectedClient:', selectedClient);
-  console.log('clientCnpjRaw:', clientCnpjRaw);
-  console.log('clientCnpj:', clientCnpj);
+  
   const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
