@@ -342,11 +342,11 @@ const ProductCard = ({ product }) => {
                 e.stopPropagation();
                 prevImage();
               }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/80 border border-gray-100 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
               aria-label="Foto anterior"
               title="Anterior"
             >
-              <span className="text-lg leading-none">&lt;</span>
+              <span className="text-xl leading-none">&lt;</span>
             </button>
         
             <button
@@ -355,11 +355,11 @@ const ProductCard = ({ product }) => {
                 e.stopPropagation();
                 nextImage();
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/80 border border-gray-100 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/80 border border-gray-300 shadow-sm flex items-center justify-center text-gray-700 hover:bg-white"
               aria-label="Próxima foto"
               title="Próxima"
             >
-              <span className="text-lg leading-none">&gt;</span>
+              <span className="text-xl leading-none">&gt;</span>
             </button>
           </>
         )}
