@@ -23,6 +23,9 @@ const ProductCard = ({ product }) => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [weeklyStock, setWeeklyStock] = useState([]);
 
+  // ✅ NOVO: tick local pra forçar refetch do schedule ao cancelar/reativar no dashboard
+  const [stockRefreshTick, setStockRefreshTick] = useState(0);
+
   // ✅ Derivados seguros
   const productCodigo = product?.codigo ?? null;
   const isVisible = product?.visivel !== false;
@@ -129,6 +132,23 @@ const ProductCard = ({ product }) => {
     return null;
   };
 
+  // ✅ NOVO: escuta evento do dashboard + storage (cross-tab)
+  useEffect(() => {
+    const bump = () => setStockRefreshTick(Date.now());
+
+    const onStorage = (e) => {
+      if (e.key === 'schlosser_stock_update') bump();
+    };
+
+    window.addEventListener('schlosser:stock-updated', bump);
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('schlosser:stock-updated', bump);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
   // ✅ Buscar agenda de estoque (7 dias)
   useEffect(() => {
     let isMounted = true;
@@ -160,7 +180,8 @@ const ProductCard = ({ product }) => {
     return () => {
       isMounted = false;
     };
-  }, [productCodigo, isVisible, stockUpdateTrigger]);
+    // ✅ inclui stockRefreshTick pra atualizar ao CANCELAR/REATIVAR no dashboard
+  }, [productCodigo, isVisible, stockUpdateTrigger, stockRefreshTick]);
 
   const handleIncrement = () => setQuantity((prev) => prev + 1);
   const handleDecrement = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
