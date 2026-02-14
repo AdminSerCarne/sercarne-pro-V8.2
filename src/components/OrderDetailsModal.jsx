@@ -7,7 +7,26 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const OrderDetailsModal = ({ isOpen, onClose, order }) => {
   if (!order) return null;
-
+    const normalizeCnpj = (value) => {
+    if (!value) return '';
+    const digits = String(value).replace(/\D/g, '');
+    if (digits.length !== 14) return String(value); // se não tiver 14 dígitos, mostra como vier
+    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  };
+  
+  const clientCnpjRaw =
+    order?.client_cnpj ||
+    order?.clientCnpj ||
+    order?.cnpj ||
+    order?.cliente?.cnpj ||
+    order?.cliente?.CNPJ ||
+    order?.client?.cnpj ||
+    order?.client?.CNPJ ||
+    order?.customer?.cnpj ||
+    '';
+  
+  const clientCnpj = normalizeCnpj(clientCnpjRaw);
+  
   const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
@@ -39,7 +58,7 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
                         <User size={14} className="text-[#FF6B35]"/> Cliente
                     </h3>
                     <p className="font-bold text-lg">{order.client_name}</p>
-                    <p className="text-gray-500 text-sm font-mono mt-1">CNPJ: {order.client_cnpj || 'N/A'}</p>
+                    <p className="text-gray-500 text-sm font-mono mt-1">CNPJ: {clientCnpj || 'N/A'}</p>
                 </div>
                 
                 <div className="bg-[#1a1a1a] p-4 rounded-lg border border-white/5">
