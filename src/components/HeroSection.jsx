@@ -45,8 +45,6 @@ const HeroSection = () => {
                 playsInline
                 preload="auto"
                 poster={HERO_IMAGE_URL}
-                onCanPlay={() => console.log("[HeroSection] vídeo pronto para tocar")}
-                onError={(e) => console.error("[HeroSection] erro no vídeo", e)}
               >
                 <source src={HERO_VIDEO_SRC} type="video/mp4" />
               </video>
