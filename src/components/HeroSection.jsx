@@ -45,7 +45,8 @@ const HeroSection = () => {
                   muted
                   loop
                   playsInline
-                  preload="metadata"
+                  preload="auto"
+                  poster="/images/hero-poster.jpg"
                   onError={() => console.error("[HeroSection] Falha ao carregar vídeo:", HERO_VIDEO_SRC)}
                 />
               </div>
