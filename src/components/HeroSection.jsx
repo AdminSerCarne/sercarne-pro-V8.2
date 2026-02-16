@@ -36,7 +36,7 @@ const HeroSection = () => {
         ) : (
           // Desktop: YouTube Embed
           // Use padding-bottom technique for aspect ratio (16:9 for YouTube)
-            <div className="absolute inset-0 -z-10 overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden">
               <video
                 className="h-full w-full object-cover"
                 autoPlay
