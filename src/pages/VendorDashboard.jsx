@@ -264,25 +264,6 @@ const VendorDashboard = () => {
     setProcessingId(null);
   }
 };
-      // 🔥 Resync do banco (evita “voltar sozinho” por fetch/real-time)
-      await fetchOrders();
-    } catch (err) {
-      console.error('[VendorDashboard] update status error:', err);
-
-      // Reverte se falhar
-      setOrders(prevOrders);
-
-      toast({
-        title: 'Erro ao atualizar',
-        description:
-          err?.message ||
-          'Não foi possível alterar o status. Verifique RLS/permissões no Supabase.',
-        variant: 'destructive',
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
 
   const handlePrint = (order) => {
     setSelectedOrder(order);
