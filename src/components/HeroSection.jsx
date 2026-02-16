@@ -19,7 +19,7 @@ const HeroSection = () => {
   const HERO_IMAGE_URL = "https://horizons-cdn.hostinger.com/f5e592ff-4b11-4a06-90fa-42f9bf225481/3ad1dc4d2742d5ad8c0ed9b5ea708c7f.jpg";
   
   // YouTube Embed URL with autoplay, mute, loop, and playlist for continuous background video (Task 1)
-  const YOUTUBE_EMBED_URL = "https://www.youtube.com/embed/NVvHTm4e-N4?controls=0&modestbranding=1&rel=0&showinfo=0&autoplay=1&mute=1&loop=1&playlist=NVvHTm4e-N4";
+  // const YOUTUBE_EMBED_URL = "https://www.youtube.com/embed/NVvHTm4e-N4?controls=0&modestbranding=1&rel=0&showinfo=0&autoplay=1&mute=1&loop=1&playlist=NVvHTm4e-N4";
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
@@ -36,14 +36,18 @@ const HeroSection = () => {
           // Desktop: YouTube Embed
           // Use padding-bottom technique for aspect ratio (16:9 for YouTube)
           <div className="relative w-full h-full pb-[56.25%] overflow-hidden">
-            <iframe 
-              className="absolute top-0 left-0 w-full h-full object-cover" 
-              src={YOUTUBE_EMBED_URL} 
-              frameBorder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowFullScreen
-              title="Schlosser PRO - Frigorífico Gaúcho/Grupo Zaleski"
-            ></iframe>
+            <div className="relative w-full h-full overflow-hidden">
+              <video
+                className="absolute inset-0 w-full h-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+              >
+                <source src="/videos/video.mp4" type="video/mp4" />
+              </video>
+            </div>
           </div>
         )}
       </div>
