@@ -20,6 +20,7 @@ const HeroSection = () => {
   
   // YouTube Embed URL with autoplay, mute, loop, and playlist for continuous background video (Task 1)
   // const YOUTUBE_EMBED_URL = "https://www.youtube.com/embed/NVvHTm4e-N4?controls=0&modestbranding=1&rel=0&showinfo=0&autoplay=1&mute=1&loop=1&playlist=NVvHTm4e-N4";
+  const HERO_VIDEO_SRC = "/videos/video.mp4";
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
@@ -36,18 +37,18 @@ const HeroSection = () => {
           // Desktop: YouTube Embed
           // Use padding-bottom technique for aspect ratio (16:9 for YouTube)
           <div className="relative w-full h-full pb-[56.25%] overflow-hidden">
-            <div className="relative w-full h-full overflow-hidden">
-              <video
-                className="absolute inset-0 w-full h-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-              >
-                <source src="/videos/video.mp4" type="video/mp4" />
-              </video>
-            </div>
+              <div className="relative w-full h-full overflow-hidden">
+                <video
+                  className="absolute inset-0 w-full h-full object-cover"
+                  src={HERO_VIDEO_SRC}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  onError={() => console.error("[HeroSection] Falha ao carregar vídeo:", HERO_VIDEO_SRC)}
+                />
+              </div>
           </div>
         )}
       </div>
