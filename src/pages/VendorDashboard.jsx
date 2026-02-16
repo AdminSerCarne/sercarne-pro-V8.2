@@ -209,35 +209,61 @@ const VendorDashboard = () => {
   // ✅ Status update (sem “toggle” perigoso)
   // -----------------------------------------
   const updateOrderStatus = async (order, newStatus) => {
-    if (!order?.id) return;
+  if (!order?.id) return;
 
-    const id = order.id;
-    const prevOrders = [...orders];
+  const id = order.id;
+  const prevOrders = [...orders];
 
-    setProcessingId(id);
+  setProcessingId(id);
 
-    // Optimistic
-    setOrders((curr) => curr.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
+  // Optimistic
+  setOrders((curr) => curr.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
 
-    try {
-      const { error } = await supabase
-        .from('pedidos')
-        .update({ status: newStatus })
-        .eq('id', id);
+  try {
+    const { data, error } = await supabase
+      .from('pedidos')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(), // ✅ importante pro realtime/anti-evento velho
+      })
+      .eq('id', id)
+      .select('id, status, updated_at')       // ✅ força retorno
+      .single();                               // ✅ e garante 1 linha
 
-      if (error) throw error;
+    if (error) throw error;
+    if (!data?.id) throw new Error('Update não afetou nenhuma linha (provável RLS/policy).');
 
-      toast({
-        title: 'Status atualizado!',
-        description: `Pedido #${String(id).slice(0, 8).toUpperCase()} agora está ${newStatus}`,
-        className:
-          newStatus === 'CONFIRMADO'
-            ? 'bg-green-800 text-white'
-            : newStatus === 'CANCELADO'
-            ? 'bg-red-700 text-white'
-            : 'bg-yellow-600 text-white',
-      });
+    toast({
+      title: 'Status atualizado!',
+      description: `Pedido #${String(id).slice(0, 8).toUpperCase()} agora está ${newStatus}`,
+      className:
+        newStatus === 'CONFIRMADO'
+          ? 'bg-green-800 text-white'
+          : newStatus === 'CANCELADO'
+          ? 'bg-red-700 text-white'
+          : 'bg-yellow-600 text-white',
+    });
 
+    // Resync do banco
+    await fetchOrders();
+
+  } catch (err) {
+    console.error('[VendorDashboard] update status error:', err);
+
+    // Reverte se falhar
+    setOrders(prevOrders);
+
+    toast({
+      title: 'Erro ao atualizar',
+      description:
+        err?.message ||
+        'Não foi possível alterar o status. Verifique RLS/permissões no Supabase.',
+      variant: 'destructive',
+    });
+  } finally {
+    setProcessingId(null);
+  }
+};
       // 🔥 Resync do banco (evita “voltar sozinho” por fetch/real-time)
       await fetchOrders();
     } catch (err) {
