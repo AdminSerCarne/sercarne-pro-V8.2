@@ -36,21 +36,21 @@ const HeroSection = () => {
         ) : (
           // Desktop: YouTube Embed
           // Use padding-bottom technique for aspect ratio (16:9 for YouTube)
-          <div className="relative w-full h-full pb-[56.25%] overflow-hidden">
-              <div className="relative w-full h-full overflow-hidden">
-                <video
-                  className="absolute inset-0 w-full h-full object-cover"
-                  src={HERO_VIDEO_SRC}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  preload="auto"
-                  poster="/images/hero-poster.jpg"
-                  onError={() => console.error("[HeroSection] Falha ao carregar vídeo:", HERO_VIDEO_SRC)}
-                />
-              </div>
-          </div>
+            <div className="absolute inset-0 -z-10 overflow-hidden">
+              <video
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                poster={HERO_IMAGE_URL}
+                onCanPlay={() => console.log("[HeroSection] vídeo pronto para tocar")}
+                onError={(e) => console.error("[HeroSection] erro no vídeo", e)}
+              >
+                <source src={HERO_VIDEO_SRC} type="video/mp4" />
+              </video>
+            </div>
         )}
       </div>
 
