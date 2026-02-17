@@ -115,22 +115,23 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
     setLoading(true);
 
     try {
-      // Guardrails
+      // ✅ Auth real (o que o RLS enxerga)
       const { data: u, error: uErr } = await supabase.auth.getUser();
       if (uErr) throw uErr;
 
       const authUid = u?.user?.id;
       if (!authUid) throw new Error("Usuário não autenticado. Faça login novamente.");
 
+      // Guardrails mínimos
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
       if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
 
       const deliveryDateISO = getDeliveryDateISO();
       if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
-      // vendor_id (informativo) vem do teu perfil interno (public.usuarios.login)
+      // ✅ vendor_id informativo: vem do perfil interno
       const vendorIdNorm = onlyDigits(user?.login || "");
-      const vendorName = user?.usuario || user?.Usuario || "Vendedor";
+      const vendorName = user?.usuario || user?.Usuario || user?.name || "Vendedor";
 
       if (!vendorIdNorm) {
         throw new Error("Perfil interno sem login (telefone). Verifique public.usuarios.login.");
@@ -147,7 +148,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       }));
 
       const orderData = {
-        vendor_uid: authUid,        // ✅ RLS usa isso (auth.uid)
+        vendor_uid: authUid,        // ✅ RLS usa auth.uid()
         vendor_id: vendorIdNorm,    // informativo/relatório
         vendor_name: vendorName,
 
