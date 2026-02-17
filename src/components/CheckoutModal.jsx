@@ -1,4 +1,3 @@
-// src/components/CheckoutModal.jsx
 import React, { useState } from 'react';
 import {
   CheckCircle,
@@ -32,9 +31,11 @@ import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 import { calcularEstoqueData } from '@/utils/stockValidator';
 import { supabase } from '@/lib/customSupabaseClient';
 
+const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+
 const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   const { cartItems, deliveryInfo, clearCart, notifyStockUpdate } = useCart();
-  const { user } = useSupabaseAuth();
+  const { user } = useSupabaseAuth(); // mantemos (pra UI/guardrails), mas o RLS usa o JWT real
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -107,7 +108,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   };
 
   const handleConfirm = async () => {
-    // 1) validação final (CAP 9)
     const isValid = await performFinalValidation();
     if (!isValid) {
       toast({
@@ -121,7 +121,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
     setLoading(true);
 
     try {
-      // Guardrails
+      // Guardrails mínimos
       if (!user?.id) throw new Error("Usuário não identificado. Faça login novamente.");
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
       if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
@@ -129,69 +129,65 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       const deliveryDateISO = getDeliveryDateISO();
       if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
-      // ✅ 1) Pega session real do Supabase (JWT) — é isso que a RLS compara
-      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-      if (sessionErr) throw sessionErr;
+      // ✅ PONTO-CHAVE: garantir que o JWT está atualizado (metadata dentro do token)
+      const { error: refreshErr } = await supabase.auth.refreshSession();
+      if (refreshErr) console.warn("[Checkout] refreshSession warning:", refreshErr);
 
-      const jwtUser = sessionData?.session?.user;
+      // ✅ Pegar usuário REAL do token (o mesmo que o RLS enxerga via auth.jwt())
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) throw userErr;
+
+      const jwtUser = userData?.user;
       const meta = jwtUser?.user_metadata || {};
+      const vendorLoginRaw = String(meta.login || '').trim(); // ex "55-99962-7055"
+      const vendorNameRaw = String(meta.usuario || meta.name || meta.display_name || '').trim();
 
-      // IMPORTANTÍSSIMO:
-      // vendor_id precisa bater com o login do JWT NO MESMO FORMATO.
-      // Ex.: "55-99962-7055" (com hífen), que é como está salvo e como vem no JWT.
-      const vendorLogin = String(meta.login || '').trim(); // ex.: "55-99962-7055"
-      const vendorName = String(meta.usuario || meta.name || '').trim();
+      const vendorLoginNorm = onlyDigits(vendorLoginRaw);
 
-      if (!vendorLogin) {
-        throw new Error("Usuário sem user_metadata.login (telefone). Ajuste o cadastro do vendedor.");
+      console.log("[Checkout] JWT meta:", meta);
+      console.log("[Checkout] vendorLoginRaw:", vendorLoginRaw, "=> vendorLoginNorm:", vendorLoginNorm);
+
+      if (!vendorLoginNorm) {
+        throw new Error("JWT sem user_metadata.login. Deslogue e logue novamente (token não carregou metadata).");
       }
 
       // 2) payload itens (serializável)
       const itemsPayload = processedItems.map(item => ({
         sku: item.codigo ?? item.sku,
         name: item.name,
-        quantity_unit: Number(item.quantity ?? 0),          // UND
-        unit_type: String(item.unitType || 'UND'),          // UND
-        quantity_kg: Number(item.estimatedWeight ?? 0),     // estimativo
-        price_per_kg: Number(item.pricePerKg ?? 0),         // R$/KG
-        total: Number(item.estimatedValue ?? 0)             // UND × peso × preço
+        quantity_unit: item.quantity,       // UND
+        unit_type: item.unitType,           // UND
+        quantity_kg: item.estimatedWeight,  // estimativo
+        price_per_kg: item.pricePerKg,      // R$/KG
+        total: item.estimatedValue          // UND × peso × preço
       }));
 
-      // ✅ CAP 10: status oficial inicial
+      // ✅ orderData compatível com tua tabela e com a RLS
       const orderData = {
-        // ✅ FIX DEFINITIVO PRO RLS:
-        // NÃO usar user.id (UUID). Usar o login do JWT (telefone) no MESMO FORMATO.
-        vendor_id: vendorLogin,
-        vendor_name: vendorName || 'Vendedor',
+        vendor_id: vendorLoginNorm,              // <<< RLS compara isso com auth.jwt()->meta.login
+        vendor_name: vendorNameRaw || 'Vendedor',
 
-        client_id: String(selectedClient.cnpj),
-        client_name: selectedClient.nomeFantasia || selectedClient.nome || null,
-        client_cnpj: String(selectedClient.cnpj),
+        client_id: selectedClient.cnpj,
+        client_name: selectedClient.nomeFantasia,
+        client_cnpj: selectedClient.cnpj,
 
-        route_id: deliveryInfo?.route_code?.toString() || deliveryInfo?.route_id?.toString() || null,
-        route_name: deliveryInfo?.route_name || null,
+        route_id: deliveryInfo?.route_code?.toString(),
+        route_name: deliveryInfo?.route_name,
         delivery_date: deliveryDateISO,
-        delivery_city: deliveryInfo?.route_city || selectedClient?.municipio || null,
-        cutoff: deliveryInfo?.route_cutoff || null,
+        delivery_city: deliveryInfo?.route_city || selectedClient?.municipio,
+        cutoff: deliveryInfo?.route_cutoff,
 
-        items: itemsPayload,
-        total_value: Number(totalValue || 0),
-        total_weight: Number(totalWeight || 0),
+        items: itemsPayload, // jsonb
+        total_value: totalValue,
+        total_weight: totalWeight,
 
-        observations: obs || '',
-
+        observations: obs,
         status: 'PEDIDO ENVIADO',
         created_at: new Date().toISOString()
       };
 
       console.log("[Checkout] Inserting Order:", orderData);
-      console.log("[Checkout] Debug vendor:", {
-        userId: user?.id,
-        jwtVendorLogin: vendorLogin,
-        jwtVendorName: vendorName
-      });
 
-      // 3) inserir pedido em pedidos
       const { data: orderResult, error: orderError } = await supabase
         .from('pedidos')
         .insert([orderData])
@@ -205,9 +201,9 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
       console.log("[Checkout] Order Created Success:", orderResult);
 
-      // 4) Sync externo (fail-safe)
+      // Sync externo (fail-safe)
       try {
-        await schlosserApi.saveOrderToSheets(orderData, vendorName || meta.usuario || 'Vendedor');
+        await schlosserApi.saveOrderToSheets(orderData, vendorNameRaw || meta.usuario || 'Vendedor');
       } catch (sheetErr) {
         console.warn("[Checkout] Sheet sync failed (fail-safe):", sheetErr);
       }
@@ -218,13 +214,11 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         className: "bg-green-50 border-green-200 text-green-900"
       });
 
-      // 5) Atualizar stock displays no app
       notifyStockUpdate();
-
-      // 6) Limpar carrinho e fechar
       clearCart();
       onClose();
       navigate('/vendedor');
+
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
       toast({
@@ -254,7 +248,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
         <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-5 py-2">
 
-          {/* Validation Errors */}
           {validationErrors.length > 0 && (
             <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm animate-in slide-in-from-top-2">
               <div className="flex items-center gap-2 text-red-700 font-bold mb-2">
@@ -281,7 +274,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             </div>
           )}
 
-          {/* Logistics Card */}
           {selectedClient && deliveryInfo?.delivery_date && (
             <div className="bg-[#FFF5EB] border border-orange-100 rounded-lg overflow-hidden shadow-sm">
               <div className="bg-orange-50 px-4 py-2 border-b border-orange-100 flex justify-between items-center">
@@ -320,7 +312,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             </div>
           )}
 
-          {/* Items Summary */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
               <Package size={12} /> Resumo dos Itens ({processedItems.length})
@@ -354,7 +345,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             </div>
           </div>
 
-          {/* Observation Input */}
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">
               Observações do Pedido
