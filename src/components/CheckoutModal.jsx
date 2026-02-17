@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   CheckCircle,
   Loader2,
@@ -7,8 +7,8 @@ import {
   CalendarCheck,
   Clock,
   Package,
-  RefreshCw
-} from 'lucide-react';
+  RefreshCw,
+} from "lucide-react";
 
 import {
   Dialog,
@@ -16,62 +16,60 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog";
 
-import { Button } from '@/components/ui/button';
-import { useCart } from '@/context/CartContext';
-import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
-import { schlosserApi } from '@/services/schlosserApi';
-import { useToast } from '@/components/ui/use-toast';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { useNavigate } from 'react-router-dom';
-import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
-import { calcularEstoqueData } from '@/utils/stockValidator';
-import { supabase } from '@/lib/customSupabaseClient';
+import { Button } from "@/components/ui/button";
+import { useCart } from "@/context/CartContext";
+import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
+import { schlosserApi } from "@/services/schlosserApi";
+import { useToast } from "@/components/ui/use-toast";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
+import { calculateOrderMetrics } from "@/utils/calculateOrderMetrics";
+import { calcularEstoqueData } from "@/utils/stockValidator";
+import { supabase } from "@/lib/customSupabaseClient";
 
-const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
 const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   const { cartItems, deliveryInfo, clearCart, notifyStockUpdate } = useCart();
-  const { user } = useSupabaseAuth(); // mantemos (pra UI/guardrails), mas o RLS usa o JWT real
+  const { user } = useSupabaseAuth(); // perfil interno (public.usuarios)
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
-  const [obs, setObs] = useState('');
+  const [obs, setObs] = useState("");
 
   const { processedItems, totalWeight, totalValue } = calculateOrderMetrics(cartItems);
 
   const formatMoney = (val) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(val || 0));
 
-  // ✅ Helper: garante YYYY-MM-DD (Date ou string)
   const getDeliveryDateISO = () => {
     const raw = deliveryInfo?.delivery_date || deliveryInfo?.date || deliveryInfo?.deliveryDate;
     if (!raw) return null;
 
     if (raw instanceof Date) {
       if (isNaN(raw.getTime())) return null;
-      return raw.toISOString().split('T')[0];
+      return raw.toISOString().split("T")[0];
     }
 
     const str = String(raw).trim();
     if (!str) return null;
 
-    if (str.includes('T')) return str.split('T')[0];
+    if (str.includes("T")) return str.split("T")[0];
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
 
     const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
 
     return null;
   };
 
-  // ✅ CAP 9: validação final antes de enviar (estoque pode mudar)
   const performFinalValidation = async () => {
     setValidating(true);
     setValidationErrors([]);
@@ -83,14 +81,10 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         errors.push("Data de entrega não definida.");
       } else {
         for (const item of processedItems) {
-          const code = String(item.codigo ?? item.sku ?? '').trim();
+          const code = String(item.codigo ?? item.sku ?? "").trim();
           const desiredQty = Number(item.quantity ?? item.quantidade ?? item.quantity_unit ?? 0);
 
           const available = await calcularEstoqueData(code, dateStr);
-
-          console.log(
-            `[CheckoutValidation] SKU ${code}: Desired ${desiredQty} vs Available ${available} @ ${dateStr}`
-          );
 
           if (available < desiredQty) {
             errors.push(`${item.name}: Estoque insuficiente para ${dateStr} (${available} disponíveis).`);
@@ -113,7 +107,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       toast({
         title: "Erro de Validação",
         description: "O estoque mudou ou é insuficiente. Verifique os erros acima.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -121,51 +115,41 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
     setLoading(true);
 
     try {
-      // Guardrails mínimos
-      if (!user?.id) throw new Error("Usuário não identificado. Faça login novamente.");
+      // Guardrails
+      const { data: u, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+
+      const authUid = u?.user?.id;
+      if (!authUid) throw new Error("Usuário não autenticado. Faça login novamente.");
+
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
       if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
 
       const deliveryDateISO = getDeliveryDateISO();
       if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
-      // ✅ PONTO-CHAVE: garantir que o JWT está atualizado (metadata dentro do token)
-      const { error: refreshErr } = await supabase.auth.refreshSession();
-      if (refreshErr) console.warn("[Checkout] refreshSession warning:", refreshErr);
+      // vendor_id (informativo) vem do teu perfil interno (public.usuarios.login)
+      const vendorIdNorm = onlyDigits(user?.login || "");
+      const vendorName = user?.usuario || user?.Usuario || "Vendedor";
 
-      // ✅ Pegar usuário REAL do token (o mesmo que o RLS enxerga via auth.jwt())
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) throw userErr;
-
-      const jwtUser = userData?.user;
-      const meta = jwtUser?.user_metadata || {};
-      const vendorLoginRaw = String(meta.login || '').trim(); // ex "55-99962-7055"
-      const vendorNameRaw = String(meta.usuario || meta.name || meta.display_name || '').trim();
-
-      const vendorLoginNorm = onlyDigits(vendorLoginRaw);
-
-      console.log("[Checkout] JWT meta:", meta);
-      console.log("[Checkout] vendorLoginRaw:", vendorLoginRaw, "=> vendorLoginNorm:", vendorLoginNorm);
-
-      if (!vendorLoginNorm) {
-        throw new Error("JWT sem user_metadata.login. Deslogue e logue novamente (token não carregou metadata).");
+      if (!vendorIdNorm) {
+        throw new Error("Perfil interno sem login (telefone). Verifique public.usuarios.login.");
       }
 
-      // 2) payload itens (serializável)
-      const itemsPayload = processedItems.map(item => ({
+      const itemsPayload = processedItems.map((item) => ({
         sku: item.codigo ?? item.sku,
         name: item.name,
-        quantity_unit: item.quantity,       // UND
-        unit_type: item.unitType,           // UND
-        quantity_kg: item.estimatedWeight,  // estimativo
-        price_per_kg: item.pricePerKg,      // R$/KG
-        total: item.estimatedValue          // UND × peso × preço
+        quantity_unit: item.quantity,
+        unit_type: item.unitType,
+        quantity_kg: item.estimatedWeight,
+        price_per_kg: item.pricePerKg,
+        total: item.estimatedValue,
       }));
 
-      // ✅ orderData compatível com tua tabela e com a RLS
       const orderData = {
-        vendor_id: vendorLoginNorm,              // <<< RLS compara isso com auth.jwt()->meta.login
-        vendor_name: vendorNameRaw || 'Vendedor',
+        vendor_uid: authUid,        // ✅ RLS usa isso (auth.uid)
+        vendor_id: vendorIdNorm,    // informativo/relatório
+        vendor_name: vendorName,
 
         client_id: selectedClient.cnpj,
         client_name: selectedClient.nomeFantasia,
@@ -177,41 +161,26 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         delivery_city: deliveryInfo?.route_city || selectedClient?.municipio,
         cutoff: deliveryInfo?.route_cutoff,
 
-        items: itemsPayload, // jsonb
+        items: itemsPayload,
         total_value: totalValue,
         total_weight: totalWeight,
 
         observations: obs,
-        status: 'PEDIDO ENVIADO',
-        created_at: new Date().toISOString()
+        status: "PEDIDO ENVIADO",
+        created_at: new Date().toISOString(),
       };
 
-      console.log("[Checkout] Inserting Order:", orderData);
-
-      const { data: u } = await supabase.auth.getUser();
-const authUid = u?.user?.id;
-
-const orderData = {
-  vendor_uid: authUid,
-  vendor_id: vendorLoginNorm,
-  ...
-};
       const { data: orderResult, error: orderError } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .insert([orderData])
         .select()
         .single();
 
-      if (orderError) {
-        console.error("[Checkout] Order Insert Error:", orderError);
-        throw new Error(`Falha ao criar pedido: ${orderError.message}`);
-      }
-
-      console.log("[Checkout] Order Created Success:", orderResult);
+      if (orderError) throw new Error(`Falha ao criar pedido: ${orderError.message}`);
 
       // Sync externo (fail-safe)
       try {
-        await schlosserApi.saveOrderToSheets(orderData, vendorNameRaw || meta.usuario || 'Vendedor');
+        await schlosserApi.saveOrderToSheets(orderData, vendorName);
       } catch (sheetErr) {
         console.warn("[Checkout] Sheet sync failed (fail-safe):", sheetErr);
       }
@@ -219,20 +188,19 @@ const orderData = {
       toast({
         title: "Sucesso! ✅",
         description: "Pedido enviado e registrado com sucesso.",
-        className: "bg-green-50 border-green-200 text-green-900"
+        className: "bg-green-50 border-green-200 text-green-900",
       });
 
       notifyStockUpdate();
       clearCart();
       onClose();
-      navigate('/vendedor');
-
+      navigate("/vendedor");
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
       toast({
         title: "Erro ao confirmar pedido",
         description: error?.message || "Verifique sua conexão e tente novamente.",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -249,13 +217,10 @@ const orderData = {
             <CalendarCheck className="text-green-600" />
             Confirmar Pedido
           </DialogTitle>
-          <DialogDescription>
-            Revise os detalhes da entrega e os itens do pedido antes de finalizar.
-          </DialogDescription>
+          <DialogDescription>Revise os detalhes da entrega e os itens do pedido antes de finalizar.</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-5 py-2">
-
           {validationErrors.length > 0 && (
             <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm animate-in slide-in-from-top-2">
               <div className="flex items-center gap-2 text-red-700 font-bold mb-2">
@@ -275,7 +240,7 @@ const orderData = {
                   onClick={performFinalValidation}
                   disabled={validating || loading}
                 >
-                  <RefreshCw className={`w-3 h-3 mr-1 ${validating ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 mr-1 ${validating ? "animate-spin" : ""}`} />
                   Revalidar Estoque
                 </Button>
               </div>
@@ -294,27 +259,24 @@ const orderData = {
                 <div className="flex items-start gap-3">
                   <div className="flex flex-col items-center justify-center p-2.5 bg-white text-orange-600 rounded-lg border border-orange-100 min-w-[70px] shadow-sm">
                     <span className="text-[10px] font-bold uppercase text-gray-400">
-                      {deliveryDateForCard ? format(deliveryDateForCard, 'EEE', { locale: ptBR }) : '--'}
+                      {deliveryDateForCard ? format(deliveryDateForCard, "EEE", { locale: ptBR }) : "--"}
                     </span>
                     <span className="text-2xl font-bold leading-none">
-                      {deliveryDateForCard ? format(deliveryDateForCard, 'd') : '--'}
+                      {deliveryDateForCard ? format(deliveryDateForCard, "d") : "--"}
                     </span>
                     <span className="text-[10px] uppercase font-bold">
-                      {deliveryDateForCard ? format(deliveryDateForCard, 'MMM', { locale: ptBR }) : '--'}
+                      {deliveryDateForCard ? format(deliveryDateForCard, "MMM", { locale: ptBR }) : "--"}
                     </span>
                   </div>
 
                   <div className="space-y-1 pt-1">
-                    <p className="text-sm font-bold text-gray-800 leading-tight">
-                      {deliveryInfo?.route_name}
-                    </p>
+                    <p className="text-sm font-bold text-gray-800 leading-tight">{deliveryInfo?.route_name}</p>
                     <div className="flex flex-wrap gap-2">
                       <span className="text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-600 flex items-center gap-1">
                         <Clock size={10} className="text-orange-500" /> Corte: {deliveryInfo?.route_cutoff}
                       </span>
                     </div>
                   </div>
-
                 </div>
               </div>
             </div>
@@ -334,9 +296,7 @@ const orderData = {
                   >
                     <div className="flex justify-between items-start gap-2">
                       <span className="font-medium text-gray-700 leading-snug">{item.name}</span>
-                      <span className="font-bold text-gray-900 whitespace-nowrap">
-                        {item.formattedValue}
-                      </span>
+                      <span className="font-bold text-gray-900 whitespace-nowrap">{item.formattedValue}</span>
                     </div>
 
                     <div className="flex justify-between items-center mt-1">
@@ -354,9 +314,7 @@ const orderData = {
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">
-              Observações do Pedido
-            </label>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">Observações do Pedido</label>
             <textarea
               className="w-full text-sm border border-gray-200 rounded-md p-2 h-20 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none bg-white placeholder:text-gray-300"
               placeholder="Ex: Entregar na porta dos fundos, ligar antes..."
@@ -365,24 +323,16 @@ const orderData = {
               disabled={loading}
             />
           </div>
-
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2 pt-2 mt-2 border-t border-gray-100">
           <div className="flex-1 flex justify-between items-center sm:justify-start sm:gap-4 mb-2 sm:mb-0">
             <span className="text-sm font-medium text-gray-500">Total Final (Est.)</span>
-            <span className="text-2xl font-bold text-[#FF8C42]">
-              {formatMoney(totalValue)}
-            </span>
+            <span className="text-2xl font-bold text-[#FF8C42]">{formatMoney(totalValue)}</span>
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              onClick={() => onClose()}
-              disabled={loading}
-              className="flex-1 sm:flex-none"
-            >
+            <Button variant="outline" onClick={() => onClose()} disabled={loading} className="flex-1 sm:flex-none">
               Cancelar
             </Button>
 
@@ -390,18 +340,15 @@ const orderData = {
               onClick={handleConfirm}
               className="bg-[#FF8C42] hover:bg-[#E67E22] text-white flex-1 sm:flex-none min-w-[140px]"
               disabled={
-                loading ||
-                validating ||
-                !selectedClient ||
-                !deliveryInfo?.delivery_date ||
-                validationErrors.length > 0
+                loading || validating || !selectedClient || !deliveryInfo?.delivery_date || validationErrors.length > 0
               }
             >
-              {loading || validating
-                ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                : <CheckCircle className="w-4 h-4 mr-2" />
-              }
-              {loading ? 'Processando...' : validating ? 'Validando...' : 'Confirmar'}
+              {loading || validating ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
+              {loading ? "Processando..." : validating ? "Validando..." : "Confirmar"}
             </Button>
           </div>
         </DialogFooter>
