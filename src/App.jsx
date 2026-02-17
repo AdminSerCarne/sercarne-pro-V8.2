@@ -11,11 +11,11 @@ import AdminDashboard from '@/pages/AdminDashboard';
 import VendorDashboard from '@/pages/VendorDashboard';
 import CatalogPage from '@/pages/CatalogPage';
 
-import '@/styles/theme.css';
-
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ShoppingCart from '@/components/ShoppingCart';
+
+import '@/styles/theme.css';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useSupabaseAuth();
@@ -23,7 +23,7 @@ const ProtectedRoute = ({ children }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]" />
       </div>
     );
   }
@@ -36,8 +36,8 @@ const DashboardRouter = () => {
   const { user } = useSupabaseAuth();
   const role = user?.tipo_usuario?.toLowerCase() || '';
 
-  if (role.includes('admin') || role.includes('gestor')) return <AdminDashboard />;
-  if (role.includes('vendedor') || role.includes('representante')) return <VendorDashboard />;
+  if (role.includes('admin') || role.includes('gestor')) return <Navigate to="/admin" replace />;
+  if (role.includes('vendedor') || role.includes('representante')) return <Navigate to="/vendedor" replace />;
   return <Navigate to="/catalog" replace />;
 };
 
@@ -47,58 +47,40 @@ const Layout = () => {
   return (
     <div className="min-h-screen flex flex-col bg-black text-gray-200 font-sans">
       <Header />
-
       <main className="flex-grow">
         <Outlet />
       </main>
-
       <Footer />
-
       <ShoppingCart isCartOpen={isCartOpen} setIsCartOpen={setIsCartOpen} />
     </div>
   );
 };
 
-function App() {
+export default function App() {
   return (
     <SupabaseAuthProvider>
       <CartProvider>
         <Router>
           <Routes>
-            {/* Public */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Layout */}
             <Route path="/" element={<Layout />}>
               <Route index element={<HomePage />} />
               <Route path="catalog" element={<CatalogPage />} />
 
-              {/* Routes que teu LoginPage usa */}
-              <Route
-                path="vendedor"
-                element={
-                  <ProtectedRoute>
-                    <VendorDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="admin"
-                element={
-                  <ProtectedRoute>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* Alternativa antiga */}
               <Route
                 path="dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardRouter />
-                  </ProtectedRoute>
-                }
+                element={<ProtectedRoute><DashboardRouter /></ProtectedRoute>}
+              />
+
+              <Route
+                path="vendedor"
+                element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>}
+              />
+
+              <Route
+                path="admin"
+                element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
               />
             </Route>
 
@@ -111,5 +93,3 @@ function App() {
     </SupabaseAuthProvider>
   );
 }
-
-export default App;
