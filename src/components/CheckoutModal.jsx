@@ -188,6 +188,14 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
       console.log("[Checkout] Inserting Order:", orderData);
 
+      const { data: u } = await supabase.auth.getUser();
+const authUid = u?.user?.id;
+
+const orderData = {
+  vendor_uid: authUid,
+  vendor_id: vendorLoginNorm,
+  ...
+};
       const { data: orderResult, error: orderError } = await supabase
         .from('pedidos')
         .insert([orderData])
