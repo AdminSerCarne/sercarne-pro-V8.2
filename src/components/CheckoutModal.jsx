@@ -121,6 +121,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
     try {
       // Guardrails
+      // ⚠️ Mantive teu guardrail, mas o RLS NÃO usa user.id (UUID). Ele usa o login do JWT.
       if (!user?.id) throw new Error("Usuário não identificado. Faça login novamente.");
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
       if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
@@ -128,12 +129,29 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       const deliveryDateISO = getDeliveryDateISO();
       if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
+      // ✅ 1) Pega session real do Supabase (JWT) — é isso que tua RLS compara
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
+
+      const jwtUser = sessionData?.session?.user;
+      const meta = jwtUser?.user_metadata || {};
+      const vendorLogin = String(meta.login || '').trim();        // ex.: "55-99962-7055"
+      const vendorName = String(meta.usuario || meta.name || '').trim();
+
+      if (!vendorLogin) {
+        throw new Error("Usuário sem user_metadata.login (telefone). Ajuste o cadastro do vendedor.");
+      }
+
+      // (opcional) normaliza pra só números (se tua policy usa regexp_replace, tá ok)
+      const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+      const vendorLoginNorm = onlyDigits(vendorLogin);
+
       // 2) payload itens (serializável)
       const itemsPayload = processedItems.map(item => ({
         sku: item.codigo ?? item.sku,
         name: item.name,
-        quantity_unit: item.quantity,     // UND
-        unit_type: item.unitType,         // UND
+        quantity_unit: item.quantity,      // UND
+        unit_type: item.unitType,          // UND
         quantity_kg: item.estimatedWeight, // estimativo
         price_per_kg: item.pricePerKg,     // R$/KG
         total: item.estimatedValue         // UND × peso × preço
@@ -141,8 +159,11 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
       // ✅ CAP 10: status oficial inicial
       const orderData = {
-        vendor_id: user.id || user.login || 'unknown',
-        vendor_name: user.usuario || 'Vendedor',
+        // ✅ AQUI ESTÁ O PONTO DO CHECKOUT QUE TU PRECISA MUDAR:
+        // Antes: vendor_id = user.id (UUID) => quebra a RLS
+        // Agora: vendor_id = login do JWT (telefone)
+        vendor_id: vendorLoginNorm,
+        vendor_name: vendorName || 'Vendedor',
 
         client_id: selectedClient.cnpj,
         client_name: selectedClient.nomeFantasia,
@@ -160,12 +181,17 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
         observations: obs,
 
-        // ✅ MANUAL V8.2
+        // ✅ teu fluxo: se quiser manter "PEDIDO ENVIADO", ok
         status: 'PEDIDO ENVIADO',
         created_at: new Date().toISOString()
       };
 
       console.log("[Checkout] Inserting Order:", orderData);
+      console.log("[Checkout] Debug vendor:", {
+        userId: user?.id,
+        vendorLogin,
+        vendorLoginNorm
+      });
 
       // 3) inserir pedido em pedidos
       const { data: orderResult, error: orderError } = await supabase
@@ -181,13 +207,9 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
       console.log("[Checkout] Order Created Success:", orderResult);
 
-      // ✅ CAP 2: NÃO EXISTE RESERVA
-      // -> Não inserir em "reservas"
-      // -> Compromisso é o próprio pedido (status comprometido já conta no stockValidator)
-
       // 4) Sync externo (fail-safe)
       try {
-        await schlosserApi.saveOrderToSheets(orderData, user.usuario);
+        await schlosserApi.saveOrderToSheets(orderData, vendorName || user.usuario);
       } catch (sheetErr) {
         console.warn("[Checkout] Sheet sync failed (fail-safe):", sheetErr);
       }
