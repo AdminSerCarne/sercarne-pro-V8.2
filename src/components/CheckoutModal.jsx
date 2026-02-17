@@ -1,3 +1,4 @@
+// src/components/CheckoutModal.jsx
 import React, { useState } from 'react';
 import {
   CheckCircle,
@@ -45,7 +46,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   const { processedItems, totalWeight, totalValue } = calculateOrderMetrics(cartItems);
 
   const formatMoney = (val) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
 
   // ✅ Helper: garante YYYY-MM-DD (Date ou string)
   const getDeliveryDateISO = () => {
@@ -121,7 +122,6 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
     try {
       // Guardrails
-      // ⚠️ Mantive teu guardrail, mas o RLS NÃO usa user.id (UUID). Ele usa o login do JWT.
       if (!user?.id) throw new Error("Usuário não identificado. Faça login novamente.");
       if (!selectedClient?.cnpj) throw new Error("Dados do cliente incompletos (CNPJ).");
       if (!Array.isArray(cartItems) || cartItems.length === 0) throw new Error("Carrinho vazio.");
@@ -129,59 +129,57 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       const deliveryDateISO = getDeliveryDateISO();
       if (!deliveryDateISO) throw new Error("Data de entrega inválida.");
 
-      // ✅ 1) Pega session real do Supabase (JWT) — é isso que tua RLS compara
+      // ✅ 1) Pega session real do Supabase (JWT) — é isso que a RLS compara
       const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr) throw sessionErr;
 
       const jwtUser = sessionData?.session?.user;
       const meta = jwtUser?.user_metadata || {};
-      const vendorLogin = String(meta.login || '').trim();        // ex.: "55-99962-7055"
+
+      // IMPORTANTÍSSIMO:
+      // vendor_id precisa bater com o login do JWT NO MESMO FORMATO.
+      // Ex.: "55-99962-7055" (com hífen), que é como está salvo e como vem no JWT.
+      const vendorLogin = String(meta.login || '').trim(); // ex.: "55-99962-7055"
       const vendorName = String(meta.usuario || meta.name || '').trim();
 
       if (!vendorLogin) {
         throw new Error("Usuário sem user_metadata.login (telefone). Ajuste o cadastro do vendedor.");
       }
 
-      // (opcional) normaliza pra só números (se tua policy usa regexp_replace, tá ok)
-      const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
-      const vendorLoginNorm = onlyDigits(vendorLogin);
-
       // 2) payload itens (serializável)
       const itemsPayload = processedItems.map(item => ({
         sku: item.codigo ?? item.sku,
         name: item.name,
-        quantity_unit: item.quantity,      // UND
-        unit_type: item.unitType,          // UND
-        quantity_kg: item.estimatedWeight, // estimativo
-        price_per_kg: item.pricePerKg,     // R$/KG
-        total: item.estimatedValue         // UND × peso × preço
+        quantity_unit: Number(item.quantity ?? 0),          // UND
+        unit_type: String(item.unitType || 'UND'),          // UND
+        quantity_kg: Number(item.estimatedWeight ?? 0),     // estimativo
+        price_per_kg: Number(item.pricePerKg ?? 0),         // R$/KG
+        total: Number(item.estimatedValue ?? 0)             // UND × peso × preço
       }));
 
       // ✅ CAP 10: status oficial inicial
       const orderData = {
-        // ✅ AQUI ESTÁ O PONTO DO CHECKOUT QUE TU PRECISA MUDAR:
-        // Antes: vendor_id = user.id (UUID) => quebra a RLS
-        // Agora: vendor_id = login do JWT (telefone)
-        vendor_id: vendorLoginNorm,
+        // ✅ FIX DEFINITIVO PRO RLS:
+        // NÃO usar user.id (UUID). Usar o login do JWT (telefone) no MESMO FORMATO.
+        vendor_id: vendorLogin,
         vendor_name: vendorName || 'Vendedor',
 
-        client_id: selectedClient.cnpj,
-        client_name: selectedClient.nomeFantasia,
-        client_cnpj: selectedClient.cnpj,
+        client_id: String(selectedClient.cnpj),
+        client_name: selectedClient.nomeFantasia || selectedClient.nome || null,
+        client_cnpj: String(selectedClient.cnpj),
 
-        route_id: deliveryInfo?.route_code?.toString(),
-        route_name: deliveryInfo?.route_name,
+        route_id: deliveryInfo?.route_code?.toString() || deliveryInfo?.route_id?.toString() || null,
+        route_name: deliveryInfo?.route_name || null,
         delivery_date: deliveryDateISO,
-        delivery_city: deliveryInfo?.route_city || selectedClient?.municipio,
-        cutoff: deliveryInfo?.route_cutoff,
+        delivery_city: deliveryInfo?.route_city || selectedClient?.municipio || null,
+        cutoff: deliveryInfo?.route_cutoff || null,
 
         items: itemsPayload,
-        total_value: totalValue,
-        total_weight: totalWeight,
+        total_value: Number(totalValue || 0),
+        total_weight: Number(totalWeight || 0),
 
-        observations: obs,
+        observations: obs || '',
 
-        // ✅ teu fluxo: se quiser manter "PEDIDO ENVIADO", ok
         status: 'PEDIDO ENVIADO',
         created_at: new Date().toISOString()
       };
@@ -189,8 +187,8 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       console.log("[Checkout] Inserting Order:", orderData);
       console.log("[Checkout] Debug vendor:", {
         userId: user?.id,
-        vendorLogin,
-        vendorLoginNorm
+        jwtVendorLogin: vendorLogin,
+        jwtVendorName: vendorName
       });
 
       // 3) inserir pedido em pedidos
@@ -209,7 +207,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
       // 4) Sync externo (fail-safe)
       try {
-        await schlosserApi.saveOrderToSheets(orderData, vendorName || user.usuario);
+        await schlosserApi.saveOrderToSheets(orderData, vendorName || meta.usuario || 'Vendedor');
       } catch (sheetErr) {
         console.warn("[Checkout] Sheet sync failed (fail-safe):", sheetErr);
       }
@@ -347,7 +345,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
                         {item.quantity} {item.unitType}
                       </span>
                       <div className="text-[10px] text-gray-500 font-mono">
-                        {item.estimatedWeight.toFixed(2)}kg est. × {formatMoney(item.pricePerKg)}
+                        {Number(item.estimatedWeight || 0).toFixed(2)}kg est. × {formatMoney(item.pricePerKg)}
                       </div>
                     </div>
                   </div>
