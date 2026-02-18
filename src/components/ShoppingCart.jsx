@@ -68,6 +68,11 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
     return (cartItems || []).reduce((acc, item) => acc + Number(item?.quantidade || 0), 0);
   }, [cartItems]);
 
+  const cartSignature = useMemo(() => {
+    return (cartItems || [])
+      .map(i => `${i.codigo}:${i.quantidade}`)
+      .join('|');
+  }, [cartItems]);
   const DISCOUNT_THRESHOLD = 10;
   const isDiscountReached = totalQuantity >= DISCOUNT_THRESHOLD;
   const unitsToDiscount = Math.max(0, DISCOUNT_THRESHOLD - totalQuantity);
@@ -110,7 +115,8 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   useEffect(() => {
     refreshStockValidation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartItems, deliveryInfo?.delivery_date]);
+ // }, [cartItems, deliveryInfo?.delivery_date]);
+    }, [cartSignature, deliveryInfo?.delivery_date]);
 
   // Handle Route Selection
   const handleRouteSelect = (route) => {
