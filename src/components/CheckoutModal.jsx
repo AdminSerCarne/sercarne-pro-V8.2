@@ -232,7 +232,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       onClose();
 
       // ✅ DASHBOARD NÃO SUMIR: /vendedor NÃO EXISTE -> usa /dashboard
-      navigate("/dashboard");
+      navigate("/vendedor");
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
       toast({
