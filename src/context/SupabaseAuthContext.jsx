@@ -136,14 +136,19 @@ export function SupabaseAuthProvider({ children }) {
       }
 
       console.log("[LOGIN] profile.auth_email:", profile.auth_email);
+      const email = profile?.auth_email || null;
+      if (!email) {
+        console.error("[LOGIN] auth_email vazio no profile");
+        return { success: false, error: "Usuário sem e-mail vinculado!" };
+      }
      // if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
       if (!profile?.auth_email) return { success: false, error: "Usuário sem auth_email cadastrado." };
 
       // Faz sign-in no Supabase Auth com email + senha
-      console.log("[LOGIN] email usado:", email);
+      console.log("[LOGIN] email usado:", profile.auth_email);
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: profile.auth_email,
-        password,
+        email,
+        password: passwordInput,
       });
       console.log("[LOGIN] retorno data:", data);
       console.log("[LOGIN] retorno error:", error);
