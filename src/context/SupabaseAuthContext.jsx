@@ -118,12 +118,17 @@ export function SupabaseAuthProvider({ children }) {
       if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
       if (!profile?.auth_email) return { success: false, error: "Usuário sem auth_email cadastrado." };
 
-      console.log("[LOGIN] tentando email:", email);
       // Faz sign-in no Supabase Auth com email + senha
+      console.log("[LOGIN] email usado:", email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email: profile.auth_email,
         password,
       });
+      console.log("[LOGIN] retorno error:", error);
+
+      if (error) {
+        console.error("[LOGIN] signInWithPassword falhou:", error.message, error);
+      }
       if (error) {
         console.error("[LOGIN] signInWithPassword error:", error);
       }
