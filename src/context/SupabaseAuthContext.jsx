@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/customSupabaseClient";
-
+console.log("[SupabaseAuthContext] arquivo carregado ✅");
 const SupabaseAuthContext = createContext(null);
 
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
@@ -99,6 +99,7 @@ export function SupabaseAuthProvider({ children }) {
 
   // LOGIN: recebe login (telefone) + senha
   const login = async (loginInput, password) => {
+    console.log("[SupabaseAuthContext] login() chamado ✅", loginInput);
     try {
       const loginNorm = onlyDigits(loginInput);
 
