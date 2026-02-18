@@ -111,6 +111,8 @@ const DeliveryDateSelector = ({
         const currentMinute = today.getMinutes();
 
         const [cutoffHour, cutoffMinute] = safeCutoff.split(':').map(Number);
+
+        // cutoff HOJE (para entrega AMANHÃ)
         const isCutoffPassed =
           currentHour > cutoffHour || (currentHour === cutoffHour && currentMinute >= cutoffMinute);
 
@@ -142,8 +144,12 @@ const DeliveryDateSelector = ({
           const d = addDays(today, i);
           const dayOfWeek = getDay(d);
 
-          // pula hoje se cutoff já passou
-          if (i === 0 && isCutoffPassed) continue;
+          // ✅ REGRA OPERACIONAL: NUNCA permitir entrega no mesmo dia (caminhão sai 07:00)
+          if (i === 0) continue;
+
+          // ✅ Cutoff é no dia anterior.
+          // Então para ENTREGA AMANHÃ (i===1), só pode se ainda NÃO passou do cutoff HOJE.
+          if (i === 1 && isCutoffPassed) continue;
 
           if (validDayNumbers.includes(dayOfWeek)) {
             potentialDates.push(d);
