@@ -29,7 +29,9 @@ const Navigation = () => {
     logout();
     navigate('/login');
   };
-
+  if (isAuthenticated && !user) {
+    return null; // ou um placeholder simples
+  }
   const menuItems = [
     ...(isAdmin ? [
       { icon: BarChart3, label: 'Dashboard', path: '/admin' },
