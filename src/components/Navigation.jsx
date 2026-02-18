@@ -8,6 +8,11 @@ const Navigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
+  const isVendorResolved =
+    isVendor ||
+    user?.app_login === "/vendedor" ||
+    String(user?.tipo_de_Usuario || "").toLowerCase() === "vendedor" ||
+    String(user?.role || "").toLowerCase() === "vendedor";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -20,7 +25,7 @@ const Navigation = () => {
       { icon: BarChart3, label: 'Dashboard', path: '/admin' },
       { icon: Package, label: 'Pedidos', path: '/admin' },
     ] : []),
-    ...(isVendor ? [
+    ...(isVendorResolved ? [
       { icon: Home, label: 'Dashboard', path: '/vendedor' },
     ] : []),
     ...(isPublic || (!isAuthenticated) ? [
@@ -71,7 +76,9 @@ const Navigation = () => {
               <>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-white">{user?.name}</p>
-                  <p className="text-xs text-[#FF8C42] uppercase font-bold tracking-wider">{user?.role}</p>
+                  <p className="text-xs text-[#FF8C42] uppercase font-bold tracking-wider">
+                    {user?.role || user?.tipo_de_Usuario || (user?.app_login === "/vendedor" ? "Vendedor" : "")}
+                  </p>
                 </div>
                 <div className="h-8 w-px bg-gray-700"></div>
                 <Button
