@@ -57,18 +57,20 @@ export function SupabaseAuthProvider({ children }) {
   const bootstrap = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.auth.getSession();
-      setSession(data?.session || null);
-
-      const { data: u } = await supabase.auth.getUser();
-      setAuthUser(u?.user || null);
-
-      const email = u?.user?.email || null;
-      const profile = await loadProfileByAuthEmail(email);
-      setUser(profile);
-
-      // opcional (mantém compat com tuas telas/prints)
-      await ensureJwtMetadata(profile);
+          const { data } = await supabase.auth.getSession();
+          const sess = data?.session || null;
+          
+          setSession(sess);
+          setAuthUser(sess?.user || null);
+          
+          const email = sess?.user?.email || null;
+          const profile = await loadProfileByAuthEmail(email);
+          setUser(profile);
+          
+          // Só faz metadata se estiver autenticado
+          if (sess?.user) {
+            await ensureJwtMetadata(profile);
+          }
     } finally {
       setLoading(false);
     }
@@ -78,16 +80,18 @@ export function SupabaseAuthProvider({ children }) {
     bootstrap();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      setSession(newSession);
-      const { data: u } = await supabase.auth.getUser();
-      setAuthUser(u?.user || null);
-
-      const email = u?.user?.email || null;
-      const profile = await loadProfileByAuthEmail(email);
-      setUser(profile);
-
-      await ensureJwtMetadata(profile);
-      setLoading(false);
+        setSession(newSession);
+        setAuthUser(newSession?.user || null);
+        
+        const email = newSession?.user?.email || null;
+        const profile = await loadProfileByAuthEmail(email);
+        setUser(profile);
+        
+        if (newSession?.user) {
+          await ensureJwtMetadata(profile);
+        }
+        
+        setLoading(false);
     });
 
     return () => sub?.subscription?.unsubscribe?.();
