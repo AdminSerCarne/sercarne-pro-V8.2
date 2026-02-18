@@ -63,7 +63,9 @@ const Header = () => {
     ];
 
     if (user) {
-        const role = user.tipo_usuario?.toLowerCase() || '';
+        //const role = user.tipo_usuario?.toLowerCase() || '';
+        const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
+        const role = String(roleRaw).toLowerCase();
         if (role.includes('admin') || role.includes('gestor') || role.includes('vendedor') || role.includes('representante')) {
              links.push({ name: 'Dashboard', path: '/vendor-dashboard' });
         }
