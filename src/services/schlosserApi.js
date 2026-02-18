@@ -409,8 +409,20 @@ export const schlosserApi = {
       console.warn(`[Supabase] Campos faltando: ${missing.join(', ')}`);
     }
 
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    
+    console.log('[saveOrderToSupabase] AUTH UID:', uid);
+    
+    if (authErr || !uid) {
+      console.error('[saveOrderToSupabase] Sem sessão autenticada:', authErr);
+      throw new Error('Você precisa estar logado para finalizar o pedido.');
+    }
+    
     const payload = {
-      vendor_uid: orderData.vendor_uid, // se vier do checkout
+      // ✅ força o vendor_uid correto (RLS exige isso)
+      vendor_uid: uid,
+    
       vendor_id: orderData.vendor_id,
       vendor_name: orderData.vendor_name,
       client_id: orderData.client_id,
