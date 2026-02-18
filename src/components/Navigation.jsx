@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, ShoppingCart, LogOut, BarChart3, Package, Menu, X, LogIn } from 'lucide-react';
-//import { useAuth } from '@/context/AuthContext';
+
 import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { Button } from '@/components/ui/button';
 
@@ -10,22 +10,18 @@ const Navigation = () => {
   const location = useLocation();
   //const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
   const { user, logout, isAuthenticated } = useSupabaseAuth();
-const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? "";
-const role = String(roleRaw).trim().toLowerCase();
+  
+  const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? "";
+  const role = String(roleRaw).trim().toLowerCase();
+  
+  const isAdmin = role === "admin" || user?.app_login === "/admin";
+  const isVendor = role === "vendedor" || user?.app_login === "/vendedor";
+  const isPublic = !isAuthenticated;
+  
+  console.log("[Navigation] user =", user);
+  console.log("[Navigation] roleRaw/role =", { roleRaw, role });
+  console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVendor });
 
-const isAdmin = role === "admin" || user?.app_login === "/admin";
-const isVendor = role === "vendedor" || user?.app_login === "/vendedor";
-const isPublic = !isAuthenticated;
-
-console.log("[Navigation] user =", user);
-console.log("[Navigation] roleRaw/role =", { roleRaw, role });
-console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVendor });
-
-//  const isVendorResolved =
-//    isVendor ||
-//    user?.app_login === "/vendedor" ||
-//    String(user?.tipo_de_Usuario || "").toLowerCase() === "vendedor" ||
-//    String(user?.role || "").toLowerCase() === "vendedor";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -45,7 +41,9 @@ console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVend
       { icon: Package, label: 'Catálogo', path: '/cliente' },
     ] : []),
   ];
-//  console.log("[Navigation] isVendorResolved =", isVendorResolved);
+
+  console.log("[Navigation] isVendor =", isVendor);
+
   return (
     <nav className="bg-[#1a1a1a] text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
