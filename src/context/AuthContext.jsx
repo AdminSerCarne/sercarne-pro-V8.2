@@ -106,7 +106,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     }),
     [user, session, loading]
   );
-
+  export const AuthProvider = AuthProviderSchlosser;
   return <SupabaseAuthContext.Provider value={value}>{children}</SupabaseAuthContext.Provider>;
 };
 
