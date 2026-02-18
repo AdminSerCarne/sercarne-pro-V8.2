@@ -4,7 +4,7 @@ import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import ProductCard from '@/components/ProductCard';
 import CatalogBanner from '@/components/CatalogBanner';
 import { Search, AlertTriangle, RefreshCw, Loader2, Lock, ShieldCheck } from 'lucide-react';
-// ❌ REMOVIDO: useProducts antigo
+// ❌ REMOVIDO: useProducts (caminho antigo googleSheetsService)
 // import { useProducts } from '@/hooks/useProducts';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useCart } from '@/context/CartContext';
@@ -15,17 +15,40 @@ import { motion } from 'framer-motion';
 // ✅ CAP 5: ordenar por estoque disponível HOJE
 import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 
-// ✅ FIX: catálogo deve ler via schlosserApi (Manual V8.3)
+// ✅ FONTE OFICIAL (manual): schlosserApi GVIZ
 import { schlosserApi } from '@/services/schlosserApi';
 
 const CatalogPage = () => {
   const { user } = useSupabaseAuth();
   const { notifyStockUpdate, stockUpdateTrigger } = useCart();
 
-  // ✅ FIX: estados locais (substitui useProducts)
+  // ✅ substitui useProducts mantendo o mesmo “contrato”
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+
+  // papel para schlosserApi (publico vs vendedor)
+  const role = user ? 'vendedor' : 'publico';
+
+  const refreshProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await schlosserApi.getProducts(role);
+      setProducts(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.error('[CatalogPage] Erro ao carregar produtos via schlosserApi:', e);
+      setProducts([]);
+      setError(e?.message || 'Falha ao carregar produtos.');
+    } finally {
+      setLoading(false);
+    }
+  }, [role]);
+
+  // carrega 1x (e recarrega quando muda role)
+  useEffect(() => {
+    refreshProducts();
+  }, [refreshProducts]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshingStock, setIsRefreshingStock] = useState(false);
@@ -36,28 +59,6 @@ const CatalogPage = () => {
 
   // ✅ força recálculo do stockMapToday mesmo se products não mudarem
   const [stockTick, setStockTick] = useState(0);
-
-  // ✅ FIX: role para schlosserApi
-  const role = user ? 'vendedor' : 'publico';
-
-  // ✅ FIX: refreshProducts agora usa schlosserApi (fonte correta)
-  const refreshProducts = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const list = await schlosserApi.getProducts(role);
-
-      // segurança: garantir array
-      const arr = Array.isArray(list) ? list : [];
-      setProducts(arr);
-    } catch (e) {
-      console.error('[CatalogPage] Erro ao carregar produtos via schlosserApi:', e);
-      setProducts([]);
-      setError(e?.message || 'Falha ao carregar produtos da planilha.');
-    } finally {
-      setLoading(false);
-    }
-  }, [role]);
 
   // -----------------------------------
   // Header content
@@ -88,11 +89,6 @@ const CatalogPage = () => {
     // força o efeito do stockMapToday rodar
     setStockTick(Date.now());
   }, [notifyStockUpdate, refreshProducts]);
-
-  // ✅ FIX: carrega catálogo no mount e quando role muda
-  useEffect(() => {
-    refreshProducts();
-  }, [refreshProducts]);
 
   // -----------------------------------
   // Realtime: pedidos mudaram => refaz estoque
@@ -184,7 +180,9 @@ const CatalogPage = () => {
 
     const filtered = (products || []).filter(p =>
       (p.codigo && String(p.codigo).includes(searchTerm)) ||
-      (p.descricao && String(p.descricao).toLowerCase().includes(term))
+      (p.descricao && String(p.descricao).toLowerCase().includes(term)) ||
+      (p.nome && String(p.nome).toLowerCase().includes(term)) ||
+      (p.name && String(p.name).toLowerCase().includes(term))
     );
 
     const sorted = [...filtered].sort((a, b) => {
