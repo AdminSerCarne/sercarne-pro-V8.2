@@ -4,6 +4,12 @@ import { supabase } from "@/lib/customSupabaseClient";
 
 const SupabaseAuthContext = createContext(null);
 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
+  return context;
+};
+
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 const isEmail = (s) => String(s || "").includes("@");
 
