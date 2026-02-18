@@ -14,6 +14,26 @@ const CLIENTS_CACHE_KEY = 'schlosser_clients_v3';
 const ROUTES_CACHE_KEY = 'schlosser_routes_v4_norm';
 const CITIES_CACHE_KEY = 'schlosser_cities_v2';
 
+// ✅ Manual: status que COMPROMETEM estoque
+const COMMITTED_STATUSES = [
+  'PEDIDO ENVIADO',
+  'PEDIDO CONFIRMADO',
+  'CONFIRMADO', // compat legado
+  'SEU PEDIDO SAIU PARA ENTREGA',
+];
+
+const onlyISODate = (d) => {
+  if (!d) return null;
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  const s = String(d).trim();
+  if (!s) return null;
+  if (s.includes('T')) return s.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+  return null;
+};
+
 export const schlosserApi = {
   _getCache(key) {
     try {
@@ -23,7 +43,7 @@ export const schlosserApi = {
       if (Date.now() - timestamp < CACHE_DURATION) return data;
       localStorage.removeItem(key);
     } catch (e) {
-      localStorage.removeItem(key);
+      try { localStorage.removeItem(key); } catch {}
     }
     return null;
   },
@@ -81,7 +101,8 @@ export const schlosserApi = {
   },
 
   async getProducts(role) {
-    const cacheKey = `${CACHE_PREFIX}products_v8_images_AE_BE_BG_brand_AG`;
+    // ✅ BUMP do cache pra não ficar preso no antigo
+    const cacheKey = `${CACHE_PREFIX}products_v8_3_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
     const cached = this._getCache(cacheKey);
     if (cached) return cached;
 
@@ -91,23 +112,25 @@ export const schlosserApi = {
      * I  = Peso médio
      * V,W,X,Y,AA = Tabelas (TAB0, TAB5, TAB4, TAB1, TAB3)
      *
-     * AE = 1ª foto limpa (export)
+     * AE = 1ª foto limpa
      * AF = 1ª foto bruta (fallback)
-     * BE = 2ª foto limpa (export)
-     * BG = 3ª foto limpa (export)
+     * BE = 2ª foto limpa
+     * BF = 2ª foto bruta (fallback)
+     * BG = 3ª foto limpa
+     * BH = 3ª foto bruta (fallback)
      *
-     * AG = marca limpa (export)
+     * AG = marca limpa
      * AH = marca bruta (fallback)
-     * AI = Código + Nome marca (ex.: 5010 BAH BEEF)
+     * AI = Código + Nome marca
      *
      * AK/AL/E = descrições
      * AC = tipoVenda
      * AX = visível
      */
 
-    // ⚠️ range precisa ir até BH para BG/BH existirem no retorno do GVIZ
+    // ⚠️ range até BH é obrigatório
     const query =
-      'SELECT D, I, V, W, X, Y, AA, AE, BE, BG, AF, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
+      'SELECT D, I, V, W, X, Y, AA, AE, BE, BG, AF, BF, BH, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
 
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
       SHEET_NAME
@@ -153,7 +176,6 @@ export const schlosserApi = {
       const products = rows
         .map((row, idx) => {
           const sku = row[0];
-
           if (!sku || isNaN(Number(sku)) || Number(sku) < 400000) return null;
 
           const prices = {
@@ -166,28 +188,31 @@ export const schlosserApi = {
 
           const weight = parseNum(row[1]);
 
-          // --- IMAGENS (AE/BE/BG) + fallback AF ---
-          const img1 = cleanStr(row[7]);  // AE
-          const img2 = cleanStr(row[8]);  // BE
-          const img3 = cleanStr(row[9]);  // BG
-          const fallbackRaw = cleanStr(row[10]); // AF
+          // --- IMAGENS (Manual: AE/AF, BE/BF, BG/BH) ---
+          const img1 = cleanStr(row[7]);   // AE
+          const img2 = cleanStr(row[8]);   // BE
+          const img3 = cleanStr(row[9]);   // BG
 
-          const imagesRaw = [img1, img2, img3].filter(Boolean);
-          if (imagesRaw.length === 0 && fallbackRaw) imagesRaw.push(fallbackRaw);
-          
+          const raw1 = cleanStr(row[10]);  // AF
+          const raw2 = cleanStr(row[11]);  // BF
+          const raw3 = cleanStr(row[12]);  // BH
+
+          const imagesRaw = [
+            img1 || raw1,
+            img2 || raw2,
+            img3 || raw3,
+          ].filter(Boolean);
+
           const images = imagesRaw.map((u) => this._processImageUrl(u)).filter(Boolean);
 
           // imagem principal (compatibilidade)
-          let primaryImg = '';
+          let primaryImg = imagesRaw[0] || '';
           let isBrandImage = false;
 
-          if (imagesRaw.length > 0) primaryImg = imagesRaw[0];
-          else if (fallbackRaw) primaryImg = fallbackRaw;
-
           // --- MARCA (AG limpa, AH bruta fallback) + nome (AI) ---
-          const brandClean = cleanStr(row[11]); // AG
-          const brandRaw = cleanStr(row[12]);   // AH
-          const brandName = cleanStr(row[13]);  // AI
+          const brandClean = cleanStr(row[13]); // AG
+          const brandRaw = cleanStr(row[14]);   // AH
+          const brandName = cleanStr(row[15]);  // AI
 
           const brandToUse = brandClean || brandRaw || '';
           const brandImage = brandToUse ? this._processImageUrl(brandToUse) : '';
@@ -197,22 +222,19 @@ export const schlosserApi = {
             isBrandImage = true;
           }
 
-          const descAK = cleanStr(row[14]); // AK
-          const descAL = cleanStr(row[15]); // AL
-          const descE = cleanStr(row[17]);  // E
+          const descAK = cleanStr(row[16]); // AK
+          const descAL = cleanStr(row[17]); // AL
+          const tipoVenda = String(row[18] || 'UND').toUpperCase(); // AC
+          const descE = cleanStr(row[19]);  // E
 
           const desc = descAK || descAL || descE || 'Produto sem descrição';
 
           let descComplementar = descAL;
           if (desc === descAL) descComplementar = '';
 
-          // AC = tipoVenda
-          const tipoVenda = String(row[16] || 'UND').toUpperCase();
-
-          // AX = visível (index 18)
-          const axValue = row[18];
+          // AX = visível
+          const axValue = row[20];
           let isVisible = false;
-
           if (axValue === true) {
             isVisible = true;
           } else if (typeof axValue === 'string') {
@@ -233,11 +255,11 @@ export const schlosserApi = {
             pesoMedio: parseFloat(weight),
             prices,
 
-            // compatibilidade
+            // compat
             imagem: processedPrimary,
             isBrandImage,
 
-            // novo: galeria + marca
+            // novo
             images,
             brandImage,
             brandName,
@@ -388,6 +410,7 @@ export const schlosserApi = {
     }
 
     const payload = {
+      vendor_uid: orderData.vendor_uid, // se vier do checkout
       vendor_id: orderData.vendor_id,
       vendor_name: orderData.vendor_name,
       client_id: orderData.client_id,
@@ -402,7 +425,7 @@ export const schlosserApi = {
       total_value: orderData.total_value,
       total_weight: orderData.total_weight,
       observations: orderData.observations,
-      status: orderData.status || 'PENDENTE',
+      status: orderData.status || 'PEDIDO ENVIADO',
     };
 
     const { data, error } = await supabase.from('pedidos').insert([payload]).select('id').single();
@@ -419,7 +442,6 @@ export const schlosserApi = {
 
   async getStockByProduct(codigo) {
     const targetCode = String(codigo).trim();
-    console.log('🔍 getStockByProduct START', { codigo: targetCode, tipo: typeof codigo });
 
     const { data, error } = await supabase
       .from('entradas_estoque')
@@ -428,26 +450,22 @@ export const schlosserApi = {
       .order('data_entrada', { ascending: true });
 
     if (error) {
-      console.log('❌ getStockByProduct ERROR', { error: error?.message, errorCode: error?.code });
       console.error('[schlosserApi] Error fetching stock entries:', error);
       return [];
     }
 
-    console.log('✅ getStockByProduct SUCCESS', { rowCount: data?.length });
     return data || [];
   },
 
   async getOrdersByProduct(sku) {
     const targetSku = String(sku).trim();
-    console.log('🔍 getOrdersByProduct START', { sku: targetSku, tipo: typeof sku });
 
     const { data, error } = await supabase
       .from('pedidos')
       .select('id, delivery_date, items, status')
-      .eq('status', 'CONFIRMADO');
+      .in('status', COMMITTED_STATUSES);
 
     if (error) {
-      console.log('❌ getOrdersByProduct ERROR', { error: error?.message, errorCode: error?.code });
       console.error('[schlosserApi] Error fetching orders:', error);
       return { totalQuantity: 0, orders: [] };
     }
@@ -459,11 +477,7 @@ export const schlosserApi = {
       let items = order.items;
 
       if (typeof items === 'string') {
-        try {
-          items = JSON.parse(items);
-        } catch (e) {
-          items = [];
-        }
+        try { items = JSON.parse(items); } catch { items = []; }
       }
 
       if (Array.isArray(items)) {
@@ -476,6 +490,7 @@ export const schlosserApi = {
               delivery_date: order.delivery_date,
               quantity_unit: qty,
               sku: targetSku,
+              status: order.status,
               original_item: item,
             });
           }
@@ -483,24 +498,14 @@ export const schlosserApi = {
       }
     });
 
-    console.log(`[schlosserApi] Summary for SKU ${targetSku}: Found ${matchingOrders.length} orders, Total Qty: ${totalQty}`);
     return { totalQuantity: totalQty, orders: matchingOrders };
   },
 
   async calculateAvailableStock(codigo, deliveryDate) {
     const safeCode = String(codigo).trim();
-
-    const dateObj = deliveryDate instanceof Date ? deliveryDate : new Date(deliveryDate);
-    const targetDateStr = isNaN(dateObj.getTime())
-      ? String(deliveryDate).split('T')[0]
-      : dateObj.toISOString().split('T')[0];
-
-    console.groupCollapsed(`[schlosserApi] calculateAvailableStock (OFFICIAL) ${safeCode} @ ${targetDateStr}`);
+    const targetDateStr = onlyISODate(deliveryDate) || String(deliveryDate).split('T')[0];
 
     const breakdown = await getStockBreakdown(safeCode, targetDateStr);
-
-    console.log('[schlosserApi] Breakdown:', breakdown);
-    console.groupEnd();
 
     return {
       codigo: safeCode,
@@ -521,7 +526,7 @@ export const schlosserApi = {
   },
 };
 
-// --- DEBUG EXPORTS ---
+// --- DEBUG EXPORTS (mantidos) ---
 
 export const debugSupabaseData = async () => {
   console.log('🐞 STARTING FULL SUPABASE DEBUG...');
@@ -554,46 +559,18 @@ export const checkRLSPolicies = async () => {
   console.log('🛡️ CHECKING RLS POLICIES...');
   const report = {};
 
-  const { error: eError } = await supabase.from('entradas_estoque').select('id').limit(1);
+  const { error: eError } = await supabase.from('entradas_estoque').select('codigo').limit(1);
   report.entradas_public_read = !eError;
-  console.log(`Entradas Public Read: ${!eError ? '✅ OK' : '❌ BLOCKED'}`, eError || '');
+  console.log(`Entradas Read: ${!eError ? '✅ OK' : '❌ BLOCKED'}`, eError || '');
 
   const { error: pError } = await supabase.from('pedidos').select('id').limit(1);
   report.pedidos_public_read = !pError;
-  console.log(`Pedidos Public Read: ${!pError ? '✅ OK' : '❌ BLOCKED'}`, pError || '');
+  console.log(`Pedidos Read: ${!pError ? '✅ OK' : '❌ BLOCKED'}`, pError || '');
 
   return report;
 };
 
 if (typeof window !== 'undefined') {
   window.schlosserApi = schlosserApi;
-
-  window.testStockCalculation = async (sku, date) => {
-    console.clear();
-    console.log('%c --- START MANUAL STOCK TEST ---', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
-    console.log(`Testing SKU: ${sku}, Delivery Date: ${date}`);
-
-    console.group('1. Checking Orders (debug helper)');
-    const orders = await schlosserApi.getOrdersByProduct(sku);
-    console.log('Orders Result:', orders);
-    console.groupEnd();
-
-    console.group('2. Checking Stock Entries (db entradas_estoque)');
-    const stock = await schlosserApi.getStockByProduct(sku);
-    console.log('Stock Entries:', stock);
-    console.groupEnd();
-
-    console.group('3. Calculating Availability (OFFICIAL)');
-    const avail = await schlosserApi.calculateAvailableStock(sku, date);
-    console.log('Calculation Result:', avail);
-    console.groupEnd();
-
-    console.log('%c --- END MANUAL STOCK TEST ---', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
-    return avail;
-  };
-
-  window.schlosserDebug = {
-    debugSupabaseData,
-    checkRLSPolicies,
-  };
+  window.schlosserDebug = { debugSupabaseData, checkRLSPolicies };
 }
