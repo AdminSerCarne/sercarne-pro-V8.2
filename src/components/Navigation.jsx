@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, ShoppingCart, LogOut, BarChart3, Package, Menu, X, LogIn } from 'lucide-react';
-
+console.log("[Navigation] ARQUIVO CARREGADO (topo do module)");
 import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { Button } from '@/components/ui/button';
 
