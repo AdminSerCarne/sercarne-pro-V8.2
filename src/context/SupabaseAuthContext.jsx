@@ -136,7 +136,7 @@ export function SupabaseAuthProvider({ children }) {
       }
 
       console.log("[LOGIN] profile.auth_email:", profile.auth_email);
-      if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
+     // if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
       if (!profile?.auth_email) return { success: false, error: "Usuário sem auth_email cadastrado." };
 
       // Faz sign-in no Supabase Auth com email + senha
