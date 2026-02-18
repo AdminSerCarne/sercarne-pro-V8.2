@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
@@ -63,10 +62,10 @@ const Header = () => {
     ];
 
     if (user) {
-        //const role = user.tipo_usuario?.toLowerCase() || '';
         const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
         const role = String(roleRaw).toLowerCase();
         if (role.includes('admin') || role.includes('gestor') || role.includes('vendedor') || role.includes('representante')) {
+             // ✅ FIX: rota correta do dashboard (no teu app) é /vendedor
              links.push({ name: 'Dashboard', path: '/vendedor' });
         }
         
