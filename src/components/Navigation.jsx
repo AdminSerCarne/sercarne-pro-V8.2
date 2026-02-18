@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, ShoppingCart, LogOut, BarChart3, Package, Menu, X, LogIn } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+//import { useAuth } from '@/context/AuthContext';
+import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { Button } from '@/components/ui/button';
 
 const Navigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
+  //const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated } = useSupabaseAuth();
+  const role = String(user?.tipo_de_Usuario || user?.role || "").toLowerCase();
+  const isAdmin = role === "admin" || user?.app_login === "/admin";
+  const isVendorResolved = role === "vendedor" || user?.app_login === "/vendedor";
+  const isPublic = !isAuthenticated;
   console.log("[Navigation] user =", user);
 console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVendor });
 
@@ -78,7 +84,7 @@ console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVend
             {isAuthenticated ? (
               <>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-white">{user?.name}</p>
+                  <p className="text-sm font-semibold text-white">{user?.usuario || user?.name}</p>
                   <p className="text-xs text-[#FF8C42] uppercase font-bold tracking-wider">
                     {user?.role || user?.tipo_de_Usuario || (user?.app_login === "/vendedor" ? "Vendedor" : "")}
                   </p>
