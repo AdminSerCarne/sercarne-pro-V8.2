@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/customSupabaseClient";
-console.log("[SupabaseAuthContext] arquivo carregado ✅");
+
 const SupabaseAuthContext = createContext(null);
 
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
@@ -100,6 +100,14 @@ export function SupabaseAuthProvider({ children }) {
   // LOGIN: recebe login (telefone) + senha
   const login = async (loginInput, password) => {
     console.log("[SupabaseAuthContext] login() chamado ✅", loginInput);
+    console.log("[LOGIN] raw loginInput:", loginInput);
+    const loginNorm = onlyDigits(loginInput);
+    console.log("[LOGIN] loginNorm (onlyDigits):", loginNorm);
+    
+    if (!loginNorm) {
+      console.error("[LOGIN] loginNorm vazio -> nenhum dígito encontrado no loginInput");
+      return { success: false, error: "Login inválido (sem dígitos)" };
+    }
     try {
       const loginNorm = onlyDigits(loginInput);
 
@@ -108,13 +116,26 @@ export function SupabaseAuthProvider({ children }) {
       }
 
       // Busca auth_email pelo login na tabela usuarios
+      console.log("[LOGIN] buscando usuario na tabela usuarios. login =", loginNorm);
       const { data: profile, error: findErr } = await supabase
         .from("usuarios")
         .select("*")
         .eq("login", loginNorm)
         .limit(1)
         .maybeSingle();
+      console.log("[LOGIN] retorno usuarios.data:", profile);
+      console.log("[LOGIN] retorno usuarios.error:", profileErr);
+      if (profileErr) {
+        console.error("[LOGIN] erro ao consultar tabela usuarios:", profileErr);
+        return { success: false, error: "Erro consultando usuarios" };
+      }
+      
+      if (!profile) {
+        console.error("[LOGIN] nenhum registro encontrado na tabela usuarios para login:", loginNorm);
+        return { success: false, error: "Usuário não encontrado" };
+      }
 
+      console.log("[LOGIN] profile.auth_email:", profile.auth_email);
       if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
       if (!profile?.auth_email) return { success: false, error: "Usuário sem auth_email cadastrado." };
 
@@ -141,6 +162,7 @@ export function SupabaseAuthProvider({ children }) {
 
       return { success: true };
     } catch (e) {
+      console.error("[LOGIN] EXCEPTION:", e);
       return { success: false, error: e?.message || "Falha no login." };
     }
   };
