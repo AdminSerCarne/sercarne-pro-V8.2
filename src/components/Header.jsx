@@ -67,7 +67,7 @@ const Header = () => {
         const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
         const role = String(roleRaw).toLowerCase();
         if (role.includes('admin') || role.includes('gestor') || role.includes('vendedor') || role.includes('representante')) {
-             links.push({ name: 'Dashboard', path: '/vendor-dashboard' });
+             links.push({ name: 'Dashboard', path: '/vendedor' });
         }
         
         if (role.includes('admin')) {
