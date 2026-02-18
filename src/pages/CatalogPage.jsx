@@ -4,7 +4,8 @@ import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import ProductCard from '@/components/ProductCard';
 import CatalogBanner from '@/components/CatalogBanner';
 import { Search, AlertTriangle, RefreshCw, Loader2, Lock, ShieldCheck } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
+// ❌ REMOVIDO: useProducts antigo
+// import { useProducts } from '@/hooks/useProducts';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useCart } from '@/context/CartContext';
 import { Button } from '@/components/ui/button';
@@ -14,10 +15,17 @@ import { motion } from 'framer-motion';
 // ✅ CAP 5: ordenar por estoque disponível HOJE
 import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 
+// ✅ FIX: catálogo deve ler via schlosserApi (Manual V8.3)
+import { schlosserApi } from '@/services/schlosserApi';
+
 const CatalogPage = () => {
   const { user } = useSupabaseAuth();
   const { notifyStockUpdate, stockUpdateTrigger } = useCart();
-  const { products, loading, error, refreshProducts } = useProducts();
+
+  // ✅ FIX: estados locais (substitui useProducts)
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshingStock, setIsRefreshingStock] = useState(false);
@@ -28,6 +36,28 @@ const CatalogPage = () => {
 
   // ✅ força recálculo do stockMapToday mesmo se products não mudarem
   const [stockTick, setStockTick] = useState(0);
+
+  // ✅ FIX: role para schlosserApi
+  const role = user ? 'vendedor' : 'publico';
+
+  // ✅ FIX: refreshProducts agora usa schlosserApi (fonte correta)
+  const refreshProducts = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await schlosserApi.getProducts(role);
+
+      // segurança: garantir array
+      const arr = Array.isArray(list) ? list : [];
+      setProducts(arr);
+    } catch (e) {
+      console.error('[CatalogPage] Erro ao carregar produtos via schlosserApi:', e);
+      setProducts([]);
+      setError(e?.message || 'Falha ao carregar produtos da planilha.');
+    } finally {
+      setLoading(false);
+    }
+  }, [role]);
 
   // -----------------------------------
   // Header content
@@ -48,7 +78,7 @@ const CatalogPage = () => {
   // -----------------------------------
   // ✅ Centraliza “recalcular estoque”
   // - notifica context
-  // - refaz produtos (recalcula available_today)
+  // - refaz produtos
   // - força stockMapToday refazer
   // -----------------------------------
   const triggerFullStockRefresh = useCallback(() => {
@@ -58,6 +88,11 @@ const CatalogPage = () => {
     // força o efeito do stockMapToday rodar
     setStockTick(Date.now());
   }, [notifyStockUpdate, refreshProducts]);
+
+  // ✅ FIX: carrega catálogo no mount e quando role muda
+  useEffect(() => {
+    refreshProducts();
+  }, [refreshProducts]);
 
   // -----------------------------------
   // Realtime: pedidos mudaram => refaz estoque
