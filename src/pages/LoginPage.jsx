@@ -27,7 +27,7 @@ const LoginPage = () => {
       // Logic requested: if "vendedor" -> /vendedor, else -> /admin
       // Also handling clients to avoid sending them to admin
       if (tipo.includes('vendedor') || tipo.includes('representante')) {
-        navigate('/dashboard');
+        navigate('/vendedor');
       } else if (tipo.includes('admin') || tipo.includes('gestor')) {
         navigate('/admin');
       } else {
