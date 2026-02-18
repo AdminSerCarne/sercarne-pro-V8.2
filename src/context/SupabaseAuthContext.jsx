@@ -109,8 +109,6 @@ export function SupabaseAuthProvider({ children }) {
       return { success: false, error: "Login inválido (sem dígitos)" };
     }
     try {
-      const loginNorm = onlyDigits(loginInput);
-
       if (!loginNorm) {
         return { success: false, error: "Informe um login válido (ex: 55-99962-7055)." };
       }
@@ -148,7 +146,7 @@ export function SupabaseAuthProvider({ children }) {
       console.log("[LOGIN] email usado:", profile.auth_email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password: passwordInput,
+        password,
       });
       console.log("[LOGIN] retorno data:", data);
       console.log("[LOGIN] retorno error:", error);
