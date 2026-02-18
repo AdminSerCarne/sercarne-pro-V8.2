@@ -117,7 +117,7 @@ export function SupabaseAuthProvider({ children }) {
 
       // Busca auth_email pelo login na tabela usuarios
       console.log("[LOGIN] buscando usuario na tabela usuarios. login =", loginNorm);
-      const { data: profile, error: findErr } = await supabase
+      const { data: profile, error: profileErr } = await supabase
         .from("usuarios")
         .select("*")
         .eq("login", loginNorm)
