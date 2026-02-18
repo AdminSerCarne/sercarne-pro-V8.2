@@ -38,7 +38,7 @@ const Navigation = () => {
       { icon: Package, label: 'Pedidos', path: '/admin' },
     ] : []),
     ...(isVendor ? [
-      { icon: Home, label: 'Dashboard', path: '/vendedor' },
+      { icon: Home, label: 'Dashboard', path: '/dashboard' },
     ] : []),
     ...(isPublic || (!isAuthenticated) ? [
       { icon: Package, label: 'Catálogo', path: '/cliente' },
