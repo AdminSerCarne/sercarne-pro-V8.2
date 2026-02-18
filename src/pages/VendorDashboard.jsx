@@ -33,6 +33,7 @@ import OrderDetailsModal from '@/components/OrderDetailsModal';
 import WhatsAppShare from '@/components/WhatsAppShare';
 
 const VendorDashboard = () => {
+  console.log("[VendorDashboard] COMPONENTE RENDERIZOU");
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
 
