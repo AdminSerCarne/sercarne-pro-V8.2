@@ -70,7 +70,7 @@ export function SupabaseAuthProvider({ children }) {
           
           const email = sess?.user?.email || null;
           const profile = await loadProfileByAuthEmail(email);
-          setUser(profile);
+          if (profile) setUser(profile);
           
           // Só faz metadata se estiver autenticado
           if (sess?.user) {
@@ -90,7 +90,7 @@ export function SupabaseAuthProvider({ children }) {
         
         const email = newSession?.user?.email || null;
         const profile = await loadProfileByAuthEmail(email);
-        setUser(profile);
+        if (profile) setUser(profile);
         
         if (newSession?.user) {
           await ensureJwtMetadata(profile);
