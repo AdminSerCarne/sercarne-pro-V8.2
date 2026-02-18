@@ -33,6 +33,32 @@ import { supabase } from "@/lib/customSupabaseClient";
 
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
+// ======= CORTE (DIA ANTERIOR) =======
+const parseCutoff = (cutoffStr) => {
+  const clean = String(cutoffStr || "")
+    .replace("h", "")
+    .trim();
+  const [hh, mm] = clean.split(":").map((x) => parseInt(x, 10));
+  return {
+    h: Number.isFinite(hh) ? hh : 17,
+    m: Number.isFinite(mm) ? mm : 30,
+  };
+};
+
+// true => já passou do corte (não pode pedir)
+const isPastCutoffForDelivery = (deliveryDateISO, cutoffStr) => {
+  const { h, m } = parseCutoff(cutoffStr);
+
+  const delivery = new Date(`${deliveryDateISO}T00:00:00`);
+  if (isNaN(delivery.getTime())) return true;
+
+  const cutoff = new Date(delivery);
+  cutoff.setDate(cutoff.getDate() - 1); // dia anterior
+  cutoff.setHours(h, m, 0, 0);
+
+  return new Date() > cutoff;
+};
+
 const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   const { cartItems, deliveryInfo, clearCart, notifyStockUpdate } = useCart();
   const { user } = useSupabaseAuth(); // perfil interno (public.usuarios)
@@ -80,6 +106,15 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       if (!dateStr) {
         errors.push("Data de entrega não definida.");
       } else {
+        // ✅ REGRA DO CORTE (dia anterior)
+        const cutoffStr = deliveryInfo?.route_cutoff || "17:30h";
+        if (isPastCutoffForDelivery(dateStr, cutoffStr)) {
+          errors.push(
+            `Pra entrega em ${dateStr}, o corte foi ${cutoffStr} do dia anterior. Selecione a próxima data disponível.`
+          );
+        }
+
+        // ✅ valida estoque por item na data
         for (const item of processedItems) {
           const code = String(item.codigo ?? item.sku ?? "").trim();
           const desiredQty = Number(item.quantity ?? item.quantidade ?? item.quantity_unit ?? 0);
@@ -106,7 +141,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
     if (!isValid) {
       toast({
         title: "Erro de Validação",
-        description: "O estoque mudou ou é insuficiente. Verifique os erros acima.",
+        description: "O estoque mudou, a data é inválida ou é insuficiente. Verifique os erros acima.",
         variant: "destructive",
       });
       return;
@@ -148,8 +183,8 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       }));
 
       const orderData = {
-        vendor_uid: authUid,        // ✅ RLS usa auth.uid()
-        vendor_id: vendorIdNorm,    // informativo/relatório
+        vendor_uid: authUid, // ✅ RLS usa auth.uid()
+        vendor_id: vendorIdNorm, // informativo/relatório
         vendor_name: vendorName,
 
         client_id: selectedClient.cnpj,
@@ -195,7 +230,9 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       notifyStockUpdate();
       clearCart();
       onClose();
-      navigate("/vendedor");
+
+      // ✅ DASHBOARD NÃO SUMIR: /vendedor NÃO EXISTE -> usa /dashboard
+      navigate("/dashboard");
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
       toast({
@@ -226,7 +263,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
             <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm animate-in slide-in-from-top-2">
               <div className="flex items-center gap-2 text-red-700 font-bold mb-2">
                 <AlertTriangle className="w-4 h-4" />
-                Problemas de Estoque Encontrados
+                Problemas Encontrados
               </div>
               <ul className="list-disc list-inside text-red-600 space-y-1 text-xs">
                 {validationErrors.map((err, idx) => (
@@ -242,7 +279,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
                   disabled={validating || loading}
                 >
                   <RefreshCw className={`w-3 h-3 mr-1 ${validating ? "animate-spin" : ""}`} />
-                  Revalidar Estoque
+                  Revalidar
                 </Button>
               </div>
             </div>
