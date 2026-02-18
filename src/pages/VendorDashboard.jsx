@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
-
+import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -287,7 +287,7 @@ const VendorDashboard = () => {
       <Helmet>
         <title>Dashboard Vendas - Schlosser</title>
       </Helmet>
-
+      <Navigation />
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/10 pb-6">
           <div>
