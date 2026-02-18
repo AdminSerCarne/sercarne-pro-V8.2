@@ -124,13 +124,11 @@ export function SupabaseAuthProvider({ children }) {
         email: profile.auth_email,
         password,
       });
+      console.log("[LOGIN] retorno data:", data);
       console.log("[LOGIN] retorno error:", error);
-
+      
       if (error) {
         console.error("[LOGIN] signInWithPassword falhou:", error.message, error);
-      }
-      if (error) {
-        console.error("[LOGIN] signInWithPassword error:", error);
       }
       if (error) return { success: false, error: error.message };
 
