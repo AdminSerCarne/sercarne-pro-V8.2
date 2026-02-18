@@ -21,7 +21,8 @@ const LoginPage = () => {
   // Handle redirection if already authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading && user) {
-      const tipo = user.tipo_usuario?.toLowerCase() || '';
+      const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
+      const tipo = String(roleRaw).toLowerCase();
       
       // Logic requested: if "vendedor" -> /vendedor, else -> /admin
       // Also handling clients to avoid sending them to admin
