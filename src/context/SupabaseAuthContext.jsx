@@ -31,28 +31,33 @@ export function SupabaseAuthProvider({ children }) {
     return data || null;
   };
 
-  // Atualiza metadata do usuário LOGADO (não precisa service role)
-  const ensureJwtMetadata = async (profile) => {
-    try {
-      if (!profile) return;
 
-      const meta = {
-        login: profile.login || "",
-        usuario: profile.usuario || profile.Usuario || profile.display_name || profile.nome || profile.usuario || "",
-        nivel: profile.Nivel ?? profile.nivel ?? null,
-        tipo_usuario: profile.tipo_de_Usuario ?? profile.tipo_usuario ?? profile["tipo_de_Usuario"] ?? "",
-      };
 
-      // grava metadata no próprio user (permitido)
-      const { error } = await supabase.auth.updateUser({ data: meta });
-      if (error) console.warn("[Auth] updateUser metadata warning:", error);
-
-      // força token novo
-      await supabase.auth.refreshSession();
-    } catch (e) {
-      console.warn("[Auth] ensureJwtMetadata warning:", e);
-    }
+  const ensureJwtMetadata = async (_profile) => {
+    return;
   };
+  // Atualiza metadata do usuário LOGADO (não precisa service role)
+//  const ensureJwtMetadata = async (profile) => {
+ //   try {
+ //     if (!profile) return;
+
+ //     const meta = {
+ //       login: profile.login || "",
+ //       usuario: profile.usuario || profile.Usuario || profile.display_name || profile.nome || profile.usuario || "",
+ //       nivel: profile.Nivel ?? profile.nivel ?? null,
+  //      tipo_usuario: profile.tipo_de_Usuario ?? profile.tipo_usuario ?? profile["tipo_de_Usuario"] ?? "",
+  //    };
+
+ //     // grava metadata no próprio user (permitido)
+ //     const { error } = await supabase.auth.updateUser({ data: meta });
+ //     if (error) console.warn("[Auth] updateUser metadata warning:", error);
+
+ //     // força token novo
+ //     await supabase.auth.refreshSession();
+ //   } catch (e) {
+ //     console.warn("[Auth] ensureJwtMetadata warning:", e);
+ //   }
+//  };
 
   const bootstrap = async () => {
     setLoading(true);
