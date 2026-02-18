@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import PrintOrderModal from '@/components/PrintOrderModal';
 import WhatsAppShare from '@/components/WhatsAppShare';
+import Navigation from '@/components/Navigation';
 
 const VendedorDashboard = () => {
   const { user } = useSupabaseAuth();
@@ -67,7 +68,7 @@ const VendedorDashboard = () => {
       <Helmet>
         <title>Dashboard Vendedor - Sistema Schlosser</title>
       </Helmet>
-
+      <Navigation />
       <div className="mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Painel do Vendedor</h1>
