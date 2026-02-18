@@ -65,7 +65,7 @@ const Header = () => {
         const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
         const role = String(roleRaw).toLowerCase();
         if (role.includes('admin') || role.includes('gestor') || role.includes('vendedor') || role.includes('representante')) {
-             // ✅ FIX: rota correta do dashboard (no teu app) é /vendedor
+             // ✅ CORREÇÃO: rota real é /vendedor
              links.push({ name: 'Dashboard', path: '/vendedor' });
         }
         
