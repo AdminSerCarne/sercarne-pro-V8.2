@@ -6,6 +6,7 @@ import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { Button } from '@/components/ui/button';
 
 const Navigation = () => {
+  console.log("[Navigation] COMPONENTE RENDERIZOU");
   const navigate = useNavigate();
   const location = useLocation();
   //const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
