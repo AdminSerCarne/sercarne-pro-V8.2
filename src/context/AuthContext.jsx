@@ -106,7 +106,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     }),
     [user, session, loading]
   );
-  export const AuthProvider = AuthProviderSchlosser;
+  
   return <SupabaseAuthContext.Provider value={value}>{children}</SupabaseAuthContext.Provider>;
 };
 
@@ -115,3 +115,4 @@ export const useSupabaseAuth = () => {
   if (!ctx) throw new Error("useSupabaseAuth deve ser usado dentro de SupabaseAuthProvider");
   return ctx;
 };
+export const AuthProvider = AuthProviderSchlosser;
