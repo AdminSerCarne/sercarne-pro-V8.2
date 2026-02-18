@@ -8,6 +8,9 @@ const Navigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
+  console.log("[Navigation] user =", user);
+console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVendor });
+
   const isVendorResolved =
     isVendor ||
     user?.app_login === "/vendedor" ||
@@ -32,7 +35,7 @@ const Navigation = () => {
       { icon: Package, label: 'Catálogo', path: '/cliente' },
     ] : []),
   ];
-
+  console.log("[Navigation] isVendorResolved =", isVendorResolved);
   return (
     <nav className="bg-[#1a1a1a] text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
