@@ -459,12 +459,12 @@ const ProductCard = ({ product }) => {
               aria-label="Fechar visualização"
               onClick={() => setIsLightboxOpen(false)}
             />
-              <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] flex items-center justify-center">
+              <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] flex flex-col">
               {/* Botão fechar */}
               <button
                 type="button"
                 onClick={() => setIsLightboxOpen(false)}
-                className="absolute top-6 right-3 md:top-8 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                className="absolute top-6 right-3 md:top-8 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center z-20"
                 aria-label="Fechar"
                 title="Fechar"
               >
@@ -496,28 +496,29 @@ const ProductCard = ({ product }) => {
                 </>
               )}
         
-              {/* Área da imagem (com swipe) */}
-              <div
-                className="w-full h-full flex items-center justify-center select-none"
-                onTouchStart={onTouchStart}
-                onTouchMove={onTouchMove}
-                //onTouchEnd={onTouchEnd}
-                onTouchEnd={onTouchEnd}
-              >
-                <img
-                  key={`lightbox-${imgIndex}`}
-                  src={displayImage}
-                  alt={product?.descricao || 'Produto'}
-                  className={`max-h-full max-w-full object-contain ${
-                    slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
-                  }`}
-                  draggable={false}
-                />
-              </div>
+          {/* Área útil da imagem (não encosta no X nem no contador) */}
+          <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-14 md:pb-16 flex items-center justify-center">
+            <div
+              className="w-full h-full flex items-center justify-center select-none"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+            >
+              <img
+                key={`lightbox-${imgIndex}`}
+                src={displayImage}
+                alt={product?.descricao || 'Produto'}
+                className={`max-h-full max-w-full object-contain ${
+                  slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
+                }`}
+                draggable={false}
+              />
+            </div>
+          </div>
         
               {/* Contador */}
               {gallery.length > 1 && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/90 text-sm bg-black/30 px-3 py-1 rounded-full">
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/90 text-sm bg-black/30 px-3 py-1 rounded-full z-20">
                   {imgIndex + 1} / {gallery.length}
                 </div>
               )}
