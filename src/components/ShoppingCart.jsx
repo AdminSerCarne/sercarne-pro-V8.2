@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+//import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       .map(i => `${i.codigo}:${i.quantidade}`)
       .join('|');
   }, [cartItems]);
+  
   const DISCOUNT_THRESHOLD = 10;
   const isDiscountReached = totalQuantity >= DISCOUNT_THRESHOLD;
   const unitsToDiscount = Math.max(0, DISCOUNT_THRESHOLD - totalQuantity);
@@ -85,38 +87,64 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
     if (isNaN(d.getTime())) return String(dateLike).split('T')[0];
     return d.toISOString().split('T')[0];
   };
-
+  const lastValidationKeyRef = useRef('');
+  const validatingRef = useRef(false);
+  
+  const deliveryDateISO = useMemo(() => {
+    return normalizeDateToISO(deliveryInfo?.delivery_date);
+  }, [deliveryInfo?.delivery_date]);
+  
+  const cartSignature = useMemo(() => {
+    return (cartItems || [])
+      .map(i => `${String(i.codigo).trim()}:${Number(i.quantidade || 0)}`)
+      .sort()
+      .join('|');
+  }, [cartItems]);
   const refreshStockValidation = async () => {
-    if (!deliveryInfo?.delivery_date) {
-      setValidationStatuses({});
-      return;
-    }
+    const key = `${deliveryDateISO}::${cartSignature}`;
 
-    if (!cartItems || cartItems.length === 0) {
-      setValidationStatuses({});
-      return;
-    }
-
-    setIsRefreshingStock(true);
-
-    const statuses = {};
-    const dateObj = new Date(deliveryInfo.delivery_date);
-
-    for (const item of cartItems) {
-      const result = await schlosserApi.calculateAvailableStock(item.codigo, dateObj);
-      const isValid = result.availableStock >= item.quantidade;
-      statuses[item.codigo] = { isValid, available: result.availableStock };
-    }
-
-    setValidationStatuses(statuses);
-    setIsRefreshingStock(false);
+    // se já está validando, não inicia outra
+    if (validatingRef.current) return;
+    
+    // se não mudou nada (mesma data + mesmo carrinho), não revalida
+    if (key === lastValidationKeyRef.current) return;
+    
+    lastValidationKeyRef.current = key;
+    validatingRef.current = true;
+    try {
+      if (!deliveryInfo?.delivery_date) {
+        setValidationStatuses({});
+        return;
+      }
+  
+      if (!cartItems || cartItems.length === 0) {
+        setValidationStatuses({});
+        return;
+      }
+  
+      setIsRefreshingStock(true);
+  
+      const statuses = {};
+      const dateObj = new Date(deliveryInfo.delivery_date);
+  
+      for (const item of cartItems) {
+        const result = await schlosserApi.calculateAvailableStock(item.codigo, dateObj);
+        const isValid = result.availableStock >= item.quantidade;
+        statuses[item.codigo] = { isValid, available: result.availableStock };
+      }
+  
+      setValidationStatuses(statuses);
+    } finally {
+      setIsRefreshingStock(false);
+      validatingRef.current = false;
+  }
   };
 
   useEffect(() => {
     refreshStockValidation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
  // }, [cartItems, deliveryInfo?.delivery_date]);
-    }, [cartSignature, deliveryInfo?.delivery_date]);
+    }, [cartSignature, deliveryDateISO]);
 
   // Handle Route Selection
   const handleRouteSelect = (route) => {
