@@ -92,7 +92,9 @@ const ProductCard = ({ product }) => {
   
   const onTouchStart = (e) => {
     if (!gallery || gallery.length <= 1) return;
-    touchStartX.current = e.touches[0].clientX;
+    const x = e.touches[0].clientX;
+    touchStartX.current = x;
+    touchEndX.current = x; // ✅ garante toque simples sem swipe fantasma
   };
   
   const onTouchMove = (e) => {
@@ -500,23 +502,15 @@ const ProductCard = ({ product }) => {
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 //onTouchEnd={onTouchEnd}
-                onTouchEnd={(e) => {
-                onTouchEnd(e); // mantém o swipe
-              
-                // Se não foi swipe, abre o modal no mobile
-                if (!didSwipeRef.current) {
-                  setIsLightboxOpen(true);
-                } else {
-                  // Se foi swipe, limpa a flag para não afetar o próximo toque
-                  didSwipeRef.current = false;
-                }
-              }}
+                onTouchEnd={onTouchEnd}
               >
                 <img
                   key={`lightbox-${imgIndex}`}
                   src={displayImage}
                   alt={product?.descricao || 'Produto'}
-                  className="max-h-full max-w-full object-contain"
+                  className={`max-h-full max-w-full object-contain ${
+                    slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
+                  }`}
                   draggable={false}
                 />
               </div>
