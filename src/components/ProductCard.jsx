@@ -497,7 +497,7 @@ const ProductCard = ({ product }) => {
               )}
         
           {/* Área útil da imagem (não encosta no X nem no contador) */}
-          <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-14 md:pb-16 flex items-center justify-center">
+          <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-16 flex items-center justify-center">
             <div
               className="w-full h-full flex items-center justify-center select-none"
               onTouchStart={onTouchStart}
