@@ -68,12 +68,6 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const totalQuantity = useMemo(() => {
     return (cartItems || []).reduce((acc, item) => acc + Number(item?.quantidade || 0), 0);
   }, [cartItems]);
-
-  const cartSignature = useMemo(() => {
-    return (cartItems || [])
-      .map(i => `${i.codigo}:${i.quantidade}`)
-      .join('|');
-  }, [cartItems]);
   
   const DISCOUNT_THRESHOLD = 10;
   const isDiscountReached = totalQuantity >= DISCOUNT_THRESHOLD;
