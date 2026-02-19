@@ -442,7 +442,6 @@ const ProductCard = ({ product }) => {
         )}
 
         {isLightboxOpen && (
-          {/*<div className="fixed inset-0 z-[9999] flex items-center justify-center">*/}
           <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 md:pt-20">
             {/* Fundo com blur + fechar ao clicar fora */}
             <button
@@ -451,8 +450,6 @@ const ProductCard = ({ product }) => {
               aria-label="Fechar visualização"
               onClick={() => setIsLightboxOpen(false)}
             />
-        
-          {/*<div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">*/}
               <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center">
               {/* Botão fechar */}
               <button
