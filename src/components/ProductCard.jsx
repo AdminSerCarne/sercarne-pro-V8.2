@@ -496,25 +496,25 @@ const ProductCard = ({ product }) => {
                 </>
               )}
         
-          {/* Área útil da imagem (não encosta no X nem no contador) */}
-            <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-28 flex items-center justify-center">
-            <div
-              className="w-full h-full flex items-center justify-center select-none"
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
-            >
-              <img
-                key={`lightbox-${imgIndex}`}
-                src={displayImage}
-                alt={product?.descricao || 'Produto'}
-                className={`max-h-full max-w-full object-contain ${
-                  slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
-                }`}
-                draggable={false}
-              />
-            </div>
-          </div>
+              {/* Área útil da imagem (não encosta no X nem no contador) */}
+              <div className="relative flex-1 min-h-0 w-full">
+                <div
+                  className="absolute inset-0 px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-28 flex items-center justify-center select-none"
+                  onTouchStart={onTouchStart}
+                  onTouchMove={onTouchMove}
+                  onTouchEnd={onTouchEnd}
+                >
+                  <img
+                    key={`lightbox-${imgIndex}`}
+                    src={displayImage}
+                    alt={product?.descricao || 'Produto'}
+                    className={`max-h-full max-w-full object-contain ${
+                      slideDir === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
+                    }`}
+                    draggable={false}
+                  />
+                </div>
+              </div>
         
               {/* Contador */}
               {gallery.length > 1 && (
