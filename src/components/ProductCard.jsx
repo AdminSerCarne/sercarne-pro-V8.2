@@ -464,7 +464,7 @@ const ProductCard = ({ product }) => {
               <button
                 type="button"
                 onClick={() => setIsLightboxOpen(false)}
-                className="absolute top-6 right-3 md:top-8 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center z-20"
+                className="absolute top-6 right-3 md:top-8 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center z-30"
                 aria-label="Fechar"
                 title="Fechar"
               >
@@ -477,7 +477,7 @@ const ProductCard = ({ product }) => {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center z-30"
                     aria-label="Foto anterior"
                     title="Anterior"
                   >
@@ -487,7 +487,7 @@ const ProductCard = ({ product }) => {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center z-30"
                     aria-label="Próxima foto"
                     title="Próxima"
                   >
@@ -499,7 +499,7 @@ const ProductCard = ({ product }) => {
               {/* Área útil da imagem (não encosta no X nem no contador) */}
               <div className="relative flex-1 min-h-0 w-full">
                 <div
-                  className="absolute inset-0 px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-28 flex items-center justify-center select-none"
+                  className="absolute inset-0 z-10 px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-28 flex items-center justify-center select-none"
                   onTouchStart={onTouchStart}
                   onTouchMove={onTouchMove}
                   onTouchEnd={onTouchEnd}
