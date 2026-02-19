@@ -442,7 +442,7 @@ const ProductCard = ({ product }) => {
         )}
 
         {isLightboxOpen && (
-          //<div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          {/*<div className="fixed inset-0 z-[9999] flex items-center justify-center">*/}
           <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 md:pt-20">
             {/* Fundo com blur + fechar ao clicar fora */}
             <button
@@ -452,7 +452,7 @@ const ProductCard = ({ product }) => {
               onClick={() => setIsLightboxOpen(false)}
             />
         
-            //<div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">
+          {/*<div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">*/}
               <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center">
               {/* Botão fechar */}
               <button
@@ -563,7 +563,7 @@ const ProductCard = ({ product }) => {
           </div>
         )}
       </div>
-
+      )
       <div className="p-4 flex flex-col flex-grow">
         <div className="mb-4 h-[3.5rem]">
           <h3 className="font-bold text-gray-900 leading-tight text-sm uppercase mb-1 line-clamp-2" title={product?.descricao}>
