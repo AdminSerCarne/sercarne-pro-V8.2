@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+//import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Minus, ShoppingCart, Scale, Tag, Calendar, Info, Check, Loader2 } from 'lucide-react';
+//import { Plus, Minus, ShoppingCart, Scale, Tag, Calendar, Info, Check, Loader2 } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, Scale, Tag, Calendar, Info, Check, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +48,26 @@ const ProductCard = ({ product }) => {
   const touchEndX = React.useRef(0);
   const didSwipeRef = React.useRef(false);
   const [slideDir, setSlideDir] = useState('next'); // 'next' | 'prev'
+
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+  
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsLightboxOpen(false);
+    };
+  
+    window.addEventListener('keydown', onKeyDown);
+  
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isLightboxOpen]);
   
   useEffect(() => {
     setImgIndex(0);
@@ -371,7 +393,7 @@ const ProductCard = ({ product }) => {
               e.stopPropagation();
               return;
             }
-            nextImage();
+            setIsLightboxOpen(true);
           }}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
@@ -418,6 +440,81 @@ const ProductCard = ({ product }) => {
             </button>
           </>
         )}
+
+        {isLightboxOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            {/* Fundo com blur + fechar ao clicar fora */}
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              aria-label="Fechar visualização"
+              onClick={() => setIsLightboxOpen(false)}
+            />
+        
+            <div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">
+              {/* Botão fechar */}
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(false)}
+                className="absolute top-3 right-3 md:top-4 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                aria-label="Fechar"
+                title="Fechar"
+              >
+                <X className="w-5 h-5 text-gray-800" />
+              </button>
+        
+              {/* Botões navegação */}
+              {gallery.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                    aria-label="Foto anterior"
+                    title="Anterior"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-gray-800" />
+                  </button>
+        
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                    aria-label="Próxima foto"
+                    title="Próxima"
+                  >
+                    <ChevronRight className="w-6 h-6 text-gray-800" />
+                  </button>
+                </>
+              )}
+        
+              {/* Área da imagem (com swipe) */}
+              <div
+                className="w-full h-full flex items-center justify-center select-none"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+              >
+                <img
+                  key={`lightbox-${imgIndex}`}
+                  src={displayImage}
+                  alt={product?.descricao || 'Produto'}
+                  className="max-h-full max-w-full object-contain"
+                  draggable={false}
+                />
+              </div>
+        
+              {/* Contador */}
+              {gallery.length > 1 && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/90 text-sm bg-black/30 px-3 py-1 rounded-full">
+                  {imgIndex + 1} / {gallery.length}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        
         {brandOverlay && (
           <div className="absolute top-2 left-2 bg-white/90 border border-gray-100 rounded-md px-1.5 py-1 shadow-sm">
             <img src={brandOverlay} alt={product?.brandName || 'Marca'} className="h-6 w-auto object-contain" loading="lazy" />
