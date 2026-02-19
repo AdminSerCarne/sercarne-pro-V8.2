@@ -46,6 +46,8 @@ const ProductCard = ({ product }) => {
   const [imgIndex, setImgIndex] = useState(0);
   const touchStartX = React.useRef(0);
   const touchEndX = React.useRef(0);
+  const touchStartY = useRef(0);
+  const touchEndY = useRef(0);
   const didSwipeRef = React.useRef(false);
   const [slideDir, setSlideDir] = useState('next'); // 'next' | 'prev'
 
@@ -92,43 +94,57 @@ const ProductCard = ({ product }) => {
   
   const onTouchStart = (e) => {
     if (!gallery || gallery.length <= 1) return;
-    const x = e.touches[0].clientX;
-    touchStartX.current = x;
-    touchEndX.current = x; // ✅ garante toque simples sem swipe fantasma
+    const t = e.touches[0];
+    touchStartX.current = t.clientX;
+    touchEndX.current = t.clientX;
+    touchStartY.current = t.clientY;
+    touchEndY.current = t.clientY;
   };
   
   const onTouchMove = (e) => {
     if (!gallery || gallery.length <= 1) return;
-    touchEndX.current = e.touches[0].clientX;
+      const t = e.touches[0];
+      touchEndX.current = t.clientX;
+      touchEndY.current = t.clientY;
   };
+
+  const TAP_THRESHOLD = 8;        // toque real: mexeu muito pouco
+  const VERTICAL_THRESHOLD = 14;  // scroll: mexeu o suficiente no Y
   
   const onTouchEnd = (e) => {
-    // ✅ toque simples deve abrir a imagem (principalmente no mobile)
     const deltaX = touchEndX.current - touchStartX.current;
+    const deltaY = touchEndY.current - touchStartY.current;
   
     // reset
     touchStartX.current = 0;
     touchEndX.current = 0;
+    touchStartY.current = 0;
+    touchEndY.current = 0;
   
-    // Se não tem galeria, ainda assim abre o modal no toque
-    if (!gallery || gallery.length <= 1) {
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+  
+    // 1) Arrasto vertical (scroll): NÃO abre modal, não troca imagem
+    if (absY > VERTICAL_THRESHOLD && absY > absX) {
+      didSwipeRef.current = false;
+      return;
+    }
+  
+    // 2) Toque (tap): abre modal
+    if (absX < TAP_THRESHOLD && absY < TAP_THRESHOLD) {
       setIsLightboxOpen(true);
       return;
     }
   
-    // Se não atingiu o threshold, é toque -> abre
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD) {
-      setIsLightboxOpen(true);
-      return;
+    // 3) Swipe horizontal: troca imagem
+    if (absX >= SWIPE_THRESHOLD && absX > absY) {
+      didSwipeRef.current = true;
+      e.preventDefault();
+      e.stopPropagation();
+  
+      if (deltaX > 0) prevImage();
+      else nextImage();
     }
-  
-    // ✅ se atingiu, é swipe -> troca a imagem
-    didSwipeRef.current = true;
-    e.preventDefault();
-    e.stopPropagation();
-  
-    if (deltaX > 0) prevImage();
-    else nextImage();
   };
   
   // ✅ Pricing
