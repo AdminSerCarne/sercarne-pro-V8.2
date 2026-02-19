@@ -101,25 +101,32 @@ const ProductCard = ({ product }) => {
   };
   
   const onTouchEnd = (e) => {
-    if (!gallery || gallery.length <= 1) return;
-  
+    // ✅ toque simples deve abrir a imagem (principalmente no mobile)
     const deltaX = touchEndX.current - touchStartX.current;
   
     // reset
     touchStartX.current = 0;
     touchEndX.current = 0;
   
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+    // Se não tem galeria, ainda assim abre o modal no toque
+    if (!gallery || gallery.length <= 1) {
+      setIsLightboxOpen(true);
+      return;
+    }
   
-    // ✅ marca que houve swipe, para bloquear o click que vem depois
+    // Se não atingiu o threshold, é toque -> abre
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD) {
+      setIsLightboxOpen(true);
+      return;
+    }
+  
+    // ✅ se atingiu, é swipe -> troca a imagem
     didSwipeRef.current = true;
-  
-    // ✅ evita que o touch vire click
     e.preventDefault();
     e.stopPropagation();
   
-    if (deltaX > 0) prevImage(); // direita -> anterior
-    else nextImage();            // esquerda -> próxima
+    if (deltaX > 0) prevImage();
+    else nextImage();
   };
   
   // ✅ Pricing
@@ -442,7 +449,7 @@ const ProductCard = ({ product }) => {
         )}
 
         {isLightboxOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 md:pt-20">
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-20 md:pt-24">
             {/* Fundo com blur + fechar ao clicar fora */}
             <button
               type="button"
@@ -450,12 +457,12 @@ const ProductCard = ({ product }) => {
               aria-label="Fechar visualização"
               onClick={() => setIsLightboxOpen(false)}
             />
-              <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center">
+              <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] flex items-center justify-center">
               {/* Botão fechar */}
               <button
                 type="button"
                 onClick={() => setIsLightboxOpen(false)}
-                className="absolute top-3 right-3 md:top-4 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
+                className="absolute top-6 right-3 md:top-8 md:right-4 w-10 h-10 rounded-full bg-white/90 hover:bg-white border border-gray-200 shadow flex items-center justify-center"
                 aria-label="Fechar"
                 title="Fechar"
               >
@@ -560,7 +567,7 @@ const ProductCard = ({ product }) => {
           </div>
         )}
       </div>
-      )
+      
       <div className="p-4 flex flex-col flex-grow">
         <div className="mb-4 h-[3.5rem]">
           <h3 className="font-bold text-gray-900 leading-tight text-sm uppercase mb-1 line-clamp-2" title={product?.descricao}>
