@@ -497,7 +497,7 @@ const ProductCard = ({ product }) => {
               )}
         
           {/* Área útil da imagem (não encosta no X nem no contador) */}
-          <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-16 flex items-center justify-center">
+            <div className="flex-1 w-full px-2 md:px-4 pt-16 md:pt-20 pb-24 md:pb-28 flex items-center justify-center">
             <div
               className="w-full h-full flex items-center justify-center select-none"
               onTouchStart={onTouchStart}
@@ -518,7 +518,7 @@ const ProductCard = ({ product }) => {
         
               {/* Contador */}
               {gallery.length > 1 && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/90 text-sm bg-black/30 px-3 py-1 rounded-full z-20">
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/90 text-sm bg-black/30 px-3 py-1 rounded-full z-20">
                   {imgIndex + 1} / {gallery.length}
                 </div>
               )}
