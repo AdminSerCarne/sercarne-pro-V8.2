@@ -442,7 +442,8 @@ const ProductCard = ({ product }) => {
         )}
 
         {isLightboxOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          //<div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 md:pt-20">
             {/* Fundo com blur + fechar ao clicar fora */}
             <button
               type="button"
@@ -451,7 +452,8 @@ const ProductCard = ({ product }) => {
               onClick={() => setIsLightboxOpen(false)}
             />
         
-            <div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">
+            //<div className="relative z-10 w-[95vw] max-w-5xl h-[85vh] flex items-center justify-center">
+              <div className="relative z-10 w-[95vw] max-w-5xl h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center">
               {/* Botão fechar */}
               <button
                 type="button"
@@ -493,7 +495,18 @@ const ProductCard = ({ product }) => {
                 className="w-full h-full flex items-center justify-center select-none"
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
-                onTouchEnd={onTouchEnd}
+                //onTouchEnd={onTouchEnd}
+                onTouchEnd={(e) => {
+                onTouchEnd(e); // mantém o swipe
+              
+                // Se não foi swipe, abre o modal no mobile
+                if (!didSwipeRef.current) {
+                  setIsLightboxOpen(true);
+                } else {
+                  // Se foi swipe, limpa a flag para não afetar o próximo toque
+                  didSwipeRef.current = false;
+                }
+              }}
               >
                 <img
                   key={`lightbox-${imgIndex}`}
