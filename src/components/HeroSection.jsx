@@ -44,7 +44,6 @@ const HeroSection = () => {
                 loop
                 playsInline
                 preload="auto"
-                poster={HERO_IMAGE_URL}
               >
                 <source src={HERO_VIDEO_SRC} type="video/mp4" />
               </video>
