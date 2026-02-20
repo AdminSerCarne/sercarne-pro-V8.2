@@ -9,6 +9,10 @@
   `docs/MANUAL_OPERACIONAL_SCHLOSSER_PRO_V8.4.1.md`
 - Checklist de validacao:
   `docs/CHECKLIST_VALIDACAO_SCHLOSSER_PRO_V8.4.1.md`
+- Historico de implementacoes:
+  `docs/HISTORICO_IMPLEMENTACOES.md`
+- Origem historica importada:
+  `docs/ORIGENS/MANUAL_V8.4_GOOGLE_DOC_EXPORT_2026-02-20.txt`
 
 ## Regra de interpretacao
 

@@ -1,0 +1,592 @@
+﻿📕 MANUAL OPERACIONAL — SCHLOSSER PRO (sercarne.com)
+
+
+VERSÃO *V8.4* (OFICIAL • PRODUÇÃO)
+
+
+Plataforma: https://sercarne.com
+Status: ATIVA / PRODUÇÃO
+Base (fonte da verdade): Google Sheets
+Planilha oficial: Precificação Mix Frigo Schlosser / Zaleski 2026 (IA APP)
+ID: 12wPGal_n7PKYFGz9W__bXgK4mly2NbrEEGwTrIDCzcI
+
+
+Este documento é a CONSTITUIÇÃO DO SISTEMA.
+O sistema executa este manual.
+O manual não se adapta ao sistema.
+
+
+⸻
+
+
+✅ CHANGELOG (VERSÕES)
+
+
+V8.2
+
+
+Base funcional validada.
+
+
+V8.3
+        •        Galeria de imagens por produto
+        •        Overlay de marca no card
+        •        Padronização oficial das colunas AE/AF/BE/BF/BG/BH/AG/AH/AI
+
+
+V8.4 (ATUAL)
+        •        Integração oficial ENTRADAS_ESTOQUE (Sheets) → entradas_estoque (Supabase)
+        •        Formalização do fluxo de importação via Apps Script
+        •        Padronização do campo qtd_und
+        •        Regra oficial de UPSERT (codigo + data_entrada)
+        •        Documentação completa do cálculo de estoque por data
+
+
+⸻
+
+
+CAPÍTULO 0 — PRINCÍPIO FUNDAMENTAL (INALTERÁVEL)
+
+
+O Schlosser PRO existe para servir o Modelo de Negócio Schlosser.
+
+
+Ferramentas são descartáveis.
+Regras de negócio não são.
+
+
+Se houver divergência entre sistema e este manual:
+
+
+❌ é erro de implementação
+❌ não é melhoria
+❌ deve ser corrigido
+
+
+⸻
+
+
+CAPÍTULO 1 — OBJETIVO
+
+
+Definir de forma inequívoca:
+        •        Catálogo
+        •        Visibilidade
+        •        Precificação
+        •        Regras de volume
+        •        Estoque por data
+        •        Entradas futuras
+        •        Rotas e cutoff
+        •        Pedidos e status
+        •        Permissões
+        •        Piso e ajustes
+        •        Imagens e marca
+        •        Governança
+
+
+Permitir:
+        •        Troca de desenvolvedor
+        •        Troca de IA
+        •        Escalabilidade
+        •        Zero regressão
+
+
+⸻
+
+
+CAPÍTULO 2 — FONTES DA VERDADE (REGRA ABSOLUTA)
+
+
+2.1 Google Sheets
+
+
+É a única fonte da verdade para:
+        •        Produtos
+        •        Preços
+        •        Peso médio
+        •        Visibilidade
+        •        Imagens
+        •        Marca
+        •        Rotas
+
+
+2.2 Supabase
+
+
+É banco de dados operacional para:
+        •        Login
+        •        Pedidos
+        •        Entradas futuras
+        •        Cálculo de estoque
+
+
+Supabase NÃO define regra de negócio.
+
+
+2.3 Princípios imutáveis
+        •        UND ≠ KG
+        •        Preço sempre R$/KG
+        •        Peso é estimativo
+        •        Cliente nunca vê tabela
+        •        Carrinho não compromete estoque
+        •        Pedido é o primeiro compromisso real
+
+
+⸻
+
+
+CAPÍTULO 3 — ARQUITETURA OFICIAL
+
+
+3.1 Frontend
+
+
+React + Vite + Tailwind
+ProductCard
+Carrinho com UND / peso estimado / subtotal
+
+
+3.2 Leitura de dados
+
+
+Google Sheets via GVIZ/Query
+Cache leve (performance)
+
+
+3.3 Supabase
+        •        Auth
+        •        pedidos
+        •        entradas_estoque
+
+
+⸻
+
+
+CAPÍTULO 4 — ABA OFICIAL DO CATÁLOGO
+
+
+Aba obrigatória:
+
+
+✅ 2026 Base Catalogo Precifica V2
+
+
+Toda leitura deve vir dela.
+
+
+⸻
+
+
+CAPÍTULO 5 — VISIBILIDADE
+
+
+Coluna:
+
+
+AX → EXIBIR NA PLATAFORMA
+
+
+TRUE → aparece
+FALSE → não aparece
+
+
+Nenhuma lógica pode ignorar AX.
+
+
+⸻
+
+
+CAPÍTULO 6 — ORDEM DE EXIBIÇÃO
+
+
+Ordem padrão:
+Maior estoque disponível → menor
+
+
+Objetivo:
+        •        Vender o que tem
+        •        Evitar ruptura
+
+
+⸻
+
+
+CAPÍTULO 7 — LÓGICA DE PREÇO (IMUTÁVEL)
+
+
+Fórmula única:
+
+
+VALOR ESTIMADO =
+UND × PESO MÉDIO × PREÇO (R$/KG)
+
+
+Preço aplicado conforme:
+        •        Volume no carrinho
+        •        Perfil (logado/público)
+
+
+Nunca recalcular fora dessa lógica.
+
+
+⸻
+
+
+CAPÍTULO 8 — TABELAS E VOLUME
+
+
+Exemplo modelo atual:
+
+
+1 UND → TAB1
+2–9 UND → TAB0
+≥10 UND → TAB4
+
+
+Cliente vê:
+        •        preço final R$/KG
+        •        badge percentual
+
+
+Nunca mostrar:
+        •        nome da tabela
+        •        desconto em R$
+        •        regra interna
+
+
+Piso absoluto: TAB5
+
+
+⸻
+
+
+CAPÍTULO 9 — ROTAS E CUTOFF
+
+
+Fonte: Aba Rotas Dias De Entrega
+
+
+Cidade → define rota
+Rota → define dias
+Rota → define cutoff
+
+
+Usuário não pode forçar data inválida.
+
+
+⸻
+
+
+CAPÍTULO 10 — ESTOQUE POR DATA (V8.4 OFICIAL)
+
+
+Fórmula oficial:
+
+
+Disponível(D) =
+Estoque_Base
+        •        Entradas(≤D)
+− Pedidos_Comprometidos(≤D)
+
+
+⸻
+
+
+10.1 Estoque Base
+
+
+Vem do Sheets
+Coluna oficial do catálogo
+
+
+⸻
+
+
+10.2 Entradas Futuras
+
+
+Vêm do Supabase
+Tabela: entradas_estoque
+
+
+Origem operacional:
+Sheets → ENTRADAS_ESTOQUE
+
+
+⸻
+
+
+10.3 Pedidos Comprometidos
+
+
+Comprometem:
+        •        PEDIDO ENVIADO
+        •        PEDIDO CONFIRMADO
+        •        SEU PEDIDO SAIU PARA ENTREGA
+
+
+Não comprometem:
+        •        CANCELADO
+        •        PEDIDO ENTREGUE
+
+
+Carrinho não compromete.
+
+
+⸻
+
+
+CAPÍTULO 11 — ENTRADAS FUTURAS (V8.4)
+
+
+11.1 Aba oficial no Sheets
+
+
+ENTRADAS_ESTOQUE
+
+
+Estrutura obrigatória:
+
+
+A → data_entrada
+B → codigo
+C → qtd_und
+D → obs
+
+
+Colunas E e F são visuais.
+
+
+⸻
+
+
+11.2 Processo oficial
+
+
+Sheets é operacional.
+Supabase é cálculo.
+
+
+Importação via Apps Script:
+
+
+Função:
+importEntradasEstoqueToSupabase()
+
+
+⸻
+
+
+11.3 Script Properties obrigatórias
+
+
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_TABLE = entradas_estoque
+
+
+⸻
+
+
+11.4 Estrutura Supabase
+
+
+Tabela: entradas_estoque
+
+
+Campos mínimos:
+
+
+id (uuid)
+codigo (text)
+data_entrada (date)
+qtd_und (numeric)
+obs (text)
+created_at (timestamp)
+
+
+Campo oficial usado:
+✅ qtd_und
+
+
+⸻
+
+
+11.5 Regra anti-duplicação
+
+
+UPSERT por:
+
+
+(codigo, data_entrada)
+
+
+Se existir → atualiza
+Se não → cria
+
+
+Nunca duplicar.
+
+
+⸻
+
+
+CAPÍTULO 12 — PEDIDOS E STATUS
+
+
+Status oficiais:
+
+
+PEDIDO ENVIADO
+PEDIDO CONFIRMADO
+SEU PEDIDO SAIU PARA ENTREGA
+PEDIDO ENTREGUE
+CANCELADO
+
+
+Permissões:
+
+
+Níveis 1–5:
+        •        cria
+        •        cancela apenas se ENVIADO
+
+
+Níveis 6–10:
+        •        confirma
+        •        avança status
+        •        cancela com motivo
+
+
+⸻
+
+
+CAPÍTULO 13 — PISO E AJUSTES
+
+
+Piso absoluto: TAB5
+
+
+Nunca vender abaixo.
+
+
+Ajustes exigem:
+        •        motivo
+        •        usuário
+        •        data/hora
+
+
+Cliente nunca vê regra interna.
+
+
+⸻
+
+
+CAPÍTULO 14 — IMAGENS E MARCA (OFICIAL)
+
+
+Aba: 2026 Base Catalogo Precifica V2
+
+
+Colunas oficiais:
+
+
+AE → 1ª foto limpa
+AF → 1ª foto bruta
+
+
+BE → 2ª foto limpa
+BF → 2ª foto bruta
+
+
+BG → 3ª foto limpa
+BH → 3ª foto bruta
+
+
+AG → marca limpa
+AH → marca bruta
+AI → código + nome marca
+
+
+Regra:
+
+
+Prioridade sempre link limpo.
+
+
+Bolinhas aparecem apenas se 2+ fotos.
+
+
+Marca é apenas visual.
+
+
+⸻
+
+
+CAPÍTULO 15 — WHATSAPP (CIÊNCIA)
+
+
+Pedido gera WhatsApp automático.
+
+
+WhatsApp:
+❌ não confirma
+❌ não altera status
+❌ não escreve no banco
+
+
+É apenas ciência.
+
+
+⸻
+
+
+CAPÍTULO 16 — GOVERNANÇA (ANTI-REGRESSÃO)
+
+
+O sistema executa o manual.
+
+
+Durante estabilidade:
+
+
+❌ não refatorar o que funciona
+❌ não otimizar regra validada
+❌ não alterar estrutura de colunas
+
+
+Mudança só com:
+        •        validação
+        •        changelog
+        •        nova versão
+
+
+⸻
+
+
+CAPÍTULO 17 — MAPA DAS ABAS OFICIAIS
+
+
+2026 Base Catalogo Precifica V2 → catálogo
+Relacao Clientes Sysmo → clientes
+Rotas Dias De Entrega → logística
+ENTRADAS_ESTOQUE → entradas futuras
+Legenda/Objetivos → arquitetura
+
+
+⸻
+
+
+DECLARAÇÃO FINAL
+
+
+Este documento define integralmente a operação do Schlosser PRO V8.4.
+
+
+Qualquer divergência entre sistema e este manual é erro de implementação.
+
+
+O manual é soberano.
+
+
+⸻
