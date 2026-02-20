@@ -9,6 +9,8 @@
   `https://docs.google.com/document/d/15BaR0jG2a-gDE76eiQ5J0JY7jzzZ0pRqdFDTkEIyuaI/edit`
 - Export versionado no repositorio:
   `docs/ORIGENS/MANUAL_V8.4_GOOGLE_DOC_EXPORT_2026-02-20.txt`
+- PDF consolidado (all tabs):
+  `docs/ORIGENS/MODELO_NEGOCIO_OPERACOES_SCHLOSSER_PRO_2026_ALL_TABS_2026-02-20.pdf`
 - Manual vigente:
   `docs/MANUAL_OPERACIONAL_SCHLOSSER_PRO_V8.4.1.md`
 
