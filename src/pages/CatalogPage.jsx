@@ -11,6 +11,7 @@ import { useCart } from '@/context/CartContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
+import { getTodayISODateLocal } from '@/utils/dateUtils';
 
 // ✅ CAP 5: ordenar por estoque disponível HOJE
 import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
@@ -29,13 +30,22 @@ const CatalogPage = () => {
 
   // papel para schlosserApi (publico vs vendedor)
   const role = user ? 'vendedor' : 'publico';
+  const userLevel = useMemo(() => {
+    if (!user) return 0;
+    const n = Number(user?.Nivel ?? user?.nivel);
+    if (Number.isFinite(n) && n > 0) return n;
+    const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
+    if (roleRaw.includes('admin') || roleRaw.includes('gestor')) return 10;
+    return 0;
+  }, [user]);
 
   const refreshProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const list = await schlosserApi.getProducts(role);
-      setProducts(Array.isArray(list) ? list : []);
+      const visible = (Array.isArray(list) ? list : []).filter((p) => p?.visivel === true);
+      setProducts(visible);
     } catch (e) {
       console.error('[CatalogPage] Erro ao carregar produtos via schlosserApi:', e);
       setProducts([]);
@@ -153,7 +163,7 @@ const CatalogPage = () => {
 
       try {
         setLoadingSortStock(true);
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayISODateLocal();
 
         const codes = products
           .map(p => String(p.codigo || '').trim())
@@ -252,7 +262,9 @@ const CatalogPage = () => {
             <div>
               <h2 className="text-2xl font-serif font-bold text-white mb-1">Produtos Disponíveis</h2>
               <p className="text-sm text-gray-500">
-                {user ? `Tabela Aplicada: ${user.tab_preco || 'Padrão'}` : 'Faça login para ver preços personalizados'}
+                {user
+                  ? (userLevel >= 5 ? `Tabela Aplicada: ${user.tab_preco || 'Padrão'}` : 'Preços personalizados ativos')
+                  : 'Faça login para ver preços personalizados'}
                 {loadingSortStock ? ' • Ordenando por estoque do dia…' : ''}
               </p>
             </div>

@@ -1,3 +1,5 @@
+import { resolveProductUnitType } from '@/domain/unitType';
+
 export const parseNumberBR = (val) => {
   if (val === undefined || val === null || val === '') return 0;
   if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
@@ -77,17 +79,19 @@ export const calculateOrderMetrics = (items) => {
       )
     );
 
-    // 2) Price per Kg (agora cobre pricePerKg do supabase)
+    // 2) Price (compat: ainda aceita campos antigos "pricePerKg/price_per_kg")
     const rawPrice = pick(
       item.pricePerKg,
       item.price_per_kg,
       item.preco_kg,
       item.precoKg,
+      item.unitPrice,
+      item.unit_price,
       item.price,
       item.preco
     );
-    let pricePerKg = parseNumberBR(rawPrice);
-    if (!Number.isFinite(pricePerKg) || pricePerKg < 0) pricePerKg = 0;
+    let unitPrice = parseNumberBR(rawPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) unitPrice = 0;
 
     // 3) Average weight (agora cobre averageWeight/pesoMedio)
     const rawWeight = pick(
@@ -104,7 +108,7 @@ export const calculateOrderMetrics = (items) => {
     const sku = item.sku || item.codigo || item.SKU || '';
 
     // 4) Unit type
-    let unitType = pick(
+    const rawUnitType = pick(
       item.unitType,
       item.unidade_estoque,
       item.unit_type,
@@ -113,12 +117,22 @@ export const calculateOrderMetrics = (items) => {
       item.unidade
     );
 
-    if (!unitType) {
-      const numericSku = Number(sku);
-      if (!isNaN(numericSku) && numericSku >= 410000) unitType = 'CX';
-      else unitType = 'UND';
+    const unitType = resolveProductUnitType({
+      ...item,
+      codigo: item.codigo ?? sku,
+      tipoVenda: rawUnitType,
+      unitType: rawUnitType,
+      name,
+    }, 'UND');
+
+    // 4.1) Base de preço:
+    // - padrão: KG
+    // - unitType PCT: preço por pacote (fixo)
+    const rawPriceBasis = pick(item.priceBasis, item.price_basis, item.base_preco, item.basePreco);
+    let priceBasis = String(rawPriceBasis || '').toUpperCase().trim();
+    if (!priceBasis) {
+      priceBasis = unitType === 'PCT' ? 'PCT' : 'KG';
     }
-    unitType = String(unitType).toUpperCase();
 
     // 5) Estimated weight
     // Se já vier do banco (ex.: total_weight / estimatedWeight), respeita
@@ -147,7 +161,9 @@ export const calculateOrderMetrics = (items) => {
     let estimatedValueFromDB = parseNumberBR(rawEstimatedValue);
 
     const estimatedValue =
-      estimatedValueFromDB > 0 ? estimatedValueFromDB : (safeWeight * pricePerKg);
+      estimatedValueFromDB > 0
+        ? estimatedValueFromDB
+        : (priceBasis === 'PCT' ? (quantity * unitPrice) : (safeWeight * unitPrice));
 
     if (Number.isFinite(safeWeight)) totalWeight += safeWeight;
     if (Number.isFinite(estimatedValue)) totalValue += estimatedValue;
@@ -155,7 +171,7 @@ export const calculateOrderMetrics = (items) => {
     if (DEBUG_METRICS) {
       // eslint-disable-next-line no-console
       console.log(
-        `[Metrics] SKU:${sku} | Qty:${quantity} | Unit:${unitType} | AvgW:${averageWeight} | Price:${pricePerKg} -> W:${safeWeight} | V:${estimatedValue}`
+        `[Metrics] SKU:${sku} | Qty:${quantity} | Unit:${unitType} | Basis:${priceBasis} | AvgW:${averageWeight} | Price:${unitPrice} -> W:${safeWeight} | V:${estimatedValue}`
       );
     }
 
@@ -165,7 +181,10 @@ export const calculateOrderMetrics = (items) => {
       sku,
       unitType,
       quantity,
-      pricePerKg,
+      pricePerKg: unitPrice, // compat legado
+      unitPrice,
+      priceBasis,
+      priceUnitLabel: priceBasis === 'PCT' ? 'pct' : 'kg',
       averageWeight,
       estimatedWeight: safeWeight,
       estimatedValue: Number.isFinite(estimatedValue) ? estimatedValue : 0,

@@ -16,11 +16,13 @@
 
 - [ ] Colunas de preco `V/W/X/Y/Z/AA` aplicadas corretamente conforme volume.
 - [ ] Piso absoluto `TAB5` bloqueia qualquer venda abaixo do minimo.
+- [ ] Usuario nivel `3` recebe preco da `TAB2` (coluna `Z`) ao logar.
 - [ ] `AC = UND`: preco exibido como `/kg`, peso da coluna `I`.
 - [ ] `AC = CX`: preco exibido como `/kg`, peso fixo `10kg` por caixa.
 - [ ] `AC = PCT`: preco exibido como `/pct`, com valor fixo por pacote.
 - [ ] `PCT` calcula peso estimado com base na coluna `I`.
 - [ ] Nome interno da tabela nao e exibido para cliente.
+- [ ] Texto "Tabela aplicada" aparece somente para usuarios nivel `5+`.
 
 ## 3. Estoque por Data
 

@@ -7,8 +7,10 @@ import { useCart } from '@/context/CartContext';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { Badge } from '@/components/ui/badge';
 import { schlosserRules } from '@/domain/schlosserRules';
+import { resolveProductUnitType } from '@/domain/unitType';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 import { getWeeklyStockSchedule, validateAndSuggestAlternativeDate } from '@/utils/stockValidator';
+import { toISODateLocal } from '@/utils/dateUtils';
 import { useToast } from '@/components/ui/use-toast';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -158,11 +160,12 @@ const ProductCard = ({ product }) => {
   const totalUNDIfAdd = cartTotalUND + quantity;
 
   const pricesObj = product?.prices || {};
-  const { price, tabName } = useMemo(() => {
+  const { price } = useMemo(() => {
     return schlosserRules.getTabelaAplicada(totalUNDIfAdd, user, pricesObj);
   }, [totalUNDIfAdd, user, pricesObj]);
 
-  const unit = product?.unidade_estoque || 'UND';
+  const unit = resolveProductUnitType(product, 'UND');
+  const isPctSale = unit === 'PCT';
 
   // Discount Logic
   const publicPrice = Number(product?.prices?.TAB3 || 0);
@@ -202,27 +205,12 @@ const ProductCard = ({ product }) => {
 
   const isWeightValid = Number(product?.pesoMedio || 0) > 0;
   const isPriceValid = Number(price || 0) > 0;
+  const canShowSubtotal = isPriceValid && (isWeightValid || isPctSale);
 
   // ✅ Helper: pegar data de entrega real (aceita Date ou string)
   const getDeliveryDateStr = () => {
     const raw = deliveryInfo?.date || deliveryInfo?.delivery_date || deliveryInfo?.deliveryDate;
-    if (!raw) return null;
-
-    if (raw instanceof Date) {
-      if (isNaN(raw.getTime())) return null;
-      return raw.toISOString().split('T')[0];
-    }
-
-    const str = String(raw).trim();
-    if (!str) return null;
-
-    if (str.includes('T')) return str.split('T')[0];
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
-
-    return null;
+    return toISODateLocal(raw);
   };
 
   // ✅ NOVO: escuta evento do dashboard + storage (cross-tab)
@@ -595,14 +583,14 @@ const ProductCard = ({ product }) => {
           <div className="flex flex-col mb-1">
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold text-[#FF6B35]">{formatMoney(price)}</span>
-              <span className="text-xs text-gray-400 font-bold uppercase">/ KG</span>
+              <span className="text-xs text-gray-400 font-bold uppercase">/ {isPctSale ? 'PCT' : 'KG'}</span>
             </div>
 
             <div className="h-5">
               {showDiscount && (
                 <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-1.5 py-0.5 rounded w-fit border border-green-100 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
                   <Tag size={10} className="flex-shrink-0" />
-                  <span title={`Tabela aplicada: ${tabName}`}>{discountPercent.toFixed(0)}% abaixo do preço público</span>
+                  <span>{discountPercent.toFixed(0)}% abaixo do preço público</span>
                 </div>
               )}
             </div>
@@ -610,7 +598,7 @@ const ProductCard = ({ product }) => {
 
           <div className="inline-flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded text-[10px] font-bold text-gray-500 uppercase mt-1">
             <Scale size={10} />
-            Médio: {formatWeight(product?.pesoMedio || 0)} kg
+            {isPctSale ? 'Peso Padrão:' : 'Médio:'} {formatWeight(product?.pesoMedio || 0)} kg
           </div>
         </div>
 
@@ -665,7 +653,7 @@ const ProductCard = ({ product }) => {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="text-[10px]">
                         <p>{format(dateObj, "dd 'de' MMMM", { locale: ptBR })}</p>
-                        <p className="font-bold">Disponível: {Number(stock.qty || 0)} UND</p>
+                        <p className="font-bold">Disponível: {Number(stock.qty || 0)} {unit}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -710,7 +698,7 @@ const ProductCard = ({ product }) => {
             </div>
             <div className="flex justify-between text-[10px] text-gray-500 border-t border-orange-100 pt-0.5 mt-0.5">
               <span className="font-bold text-[#FF6B35]">Subtotal:</span>
-              <span className="font-bold text-[#FF6B35]">{isWeightValid && isPriceValid ? formatMoney(estimatedSubtotal) : '--'}</span>
+              <span className="font-bold text-[#FF6B35]">{canShowSubtotal ? formatMoney(estimatedSubtotal) : '--'}</span>
             </div>
           </div>
 

@@ -34,6 +34,8 @@ O manual nao se adapta ao sistema.
 - Nova regra comercial para produtos vendidos por `PCT`.
 - Quando `AC = PCT`, o preco exibido nas tabelas (`V/W/X/Y/Z/AA`) deve ser por pacote (`/pct`) e nao por kg.
 - Inclusao da regra de peso fixo por pacote para calculo de peso estimado.
+- Regra comercial de transferencia: `TAB2` (coluna `Z`) exclusiva para usuario de nivel `3`, aplicada direto ao logar.
+- Exibicao de "Tabela aplicada" somente para usuarios de nivel `5` ou superior.
 
 ---
 
@@ -180,6 +182,9 @@ Peso estimado total para `PCT`:
 Colunas oficiais de preco:
 - `V (TAB0)`, `W`, `X`, `Y`, `Z`, `AA`
 
+Regra de perfil:
+- Usuario nivel `3`: usa `TAB2` (coluna `Z`) como tabela exclusiva de transferencia.
+
 Regra de exibicao:
 - Exibir `/kg` para `UND` e `CX`
 - Exibir `/pct` para `PCT`
@@ -206,6 +211,9 @@ Cliente nao ve:
 - nome da tabela
 - desconto em R$
 - regra interna
+
+Excecao controlada de exibicao:
+- Indicador de "Tabela aplicada" so pode aparecer para usuarios nivel `5+`.
 
 Piso absoluto:
 - `TAB5`

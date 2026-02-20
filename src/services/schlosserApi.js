@@ -1,6 +1,10 @@
 import { supabase } from '@/lib/customSupabaseClient';
+import { schlosserRules } from '@/domain/schlosserRules';
+import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
+import { resolveProductUnitType } from '@/domain/unitType';
 import { normalizeCity } from '@/utils/normalizeCity';
 import { getStockBreakdown } from '@/utils/stockValidator';
+import { toISODateLocal } from '@/utils/dateUtils';
 
 const SPREADSHEET_ID = '12wPGal_n7PKYFGz9W__bXgK4mly2NbrEEGwTrIDCzcI';
 const SHEET_NAME = '2026 Base Catalogo Precifica V2';
@@ -14,25 +18,24 @@ const CLIENTS_CACHE_KEY = 'schlosser_clients_v3';
 const ROUTES_CACHE_KEY = 'schlosser_routes_v4_norm';
 const CITIES_CACHE_KEY = 'schlosser_cities_v2';
 
-// ✅ Manual: status que COMPROMETEM estoque
+// ✅ Manual: status que COMPROMETEM estoque (com compat legado para histórico)
 const COMMITTED_STATUSES = [
-  'PEDIDO ENVIADO',
-  'PEDIDO CONFIRMADO',
-  'CONFIRMADO', // compat legado
-  'SEU PEDIDO SAIU PARA ENTREGA',
+  ORDER_STATUS.ENVIADO,
+  ORDER_STATUS.CONFIRMADO,
+  ORDER_STATUS.SAIU_PARA_ENTREGA,
+  'PENDENTE',
+  'ENVIADO',
+  'CONFIRMADO',
+  'SAIU PARA ENTREGA',
 ];
 
 const onlyISODate = (d) => {
-  if (!d) return null;
-  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().split('T')[0];
-  const s = String(d).trim();
-  if (!s) return null;
-  if (s.includes('T')) return s.split('T')[0];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const parsed = new Date(s);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
-  return null;
+  return toISODateLocal(d);
 };
+
+const formatMoneyBRL = (value) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
 
 export const schlosserApi = {
   _getCache(key) {
@@ -100,9 +103,278 @@ export const schlosserApi = {
     return '';
   },
 
+  getEffectiveTable(product, userOrRole = null, totalUND = 1) {
+    const prices = product?.prices || {};
+
+    let user = userOrRole;
+    if (typeof userOrRole === 'string') {
+      const normalized = userOrRole.toLowerCase();
+      user = normalized === 'public' ? null : { role: normalized };
+    }
+
+    const safeTotalUND = Number.isFinite(Number(totalUND)) && Number(totalUND) > 0 ? Number(totalUND) : 1;
+    return schlosserRules.getTabelaAplicada(safeTotalUND, user, prices).tabName;
+  },
+
+  calculatePrice(product, userOrRole = null, totalUND = 1) {
+    const prices = product?.prices || {};
+
+    let user = userOrRole;
+    if (typeof userOrRole === 'string') {
+      const normalized = userOrRole.toLowerCase();
+      user = normalized === 'public' ? null : { role: normalized };
+    }
+
+    const safeTotalUND = Number.isFinite(Number(totalUND)) && Number(totalUND) > 0 ? Number(totalUND) : 1;
+    const { price } = schlosserRules.getTabelaAplicada(safeTotalUND, user, prices);
+    return Number(price || 0);
+  },
+
+  calculateLineItem(product, quantity, userOrRole = null, totalUND = null) {
+    const qty = Math.max(0, Number(quantity || 0));
+    const undForTable = Number.isFinite(Number(totalUND)) && Number(totalUND) > 0 ? Number(totalUND) : Math.max(1, qty);
+    const unitPrice = this.calculatePrice(product, userOrRole, undForTable);
+
+    const weightPerUnit = Number(product?.pesoMedio ?? product?.peso ?? 0) || 0;
+    const unitType = resolveProductUnitType(product, 'UND');
+    const priceBasis = unitType === 'PCT' ? 'PCT' : 'KG';
+    const effectiveWeightPerUnit =
+      unitType === 'CX' ? 10 :
+      unitType === 'KG' ? 1 :
+      weightPerUnit;
+
+    const totalWeight = qty * effectiveWeightPerUnit;
+    const total = priceBasis === 'PCT' ? (qty * unitPrice) : (totalWeight * unitPrice);
+
+    const displayString =
+      priceBasis === 'PCT'
+        ? `${qty} ${unitType} x ${formatMoneyBRL(unitPrice)}/pct = ${formatMoneyBRL(total)}`
+        : unitType === 'KG'
+        ? `${qty} KG x ${formatMoneyBRL(unitPrice)}/kg = ${formatMoneyBRL(total)}`
+        : `${qty} ${unitType} x ${effectiveWeightPerUnit.toFixed(3)}kg x ${formatMoneyBRL(unitPrice)}/kg = ${formatMoneyBRL(total)}`;
+
+    return {
+      quantity: qty,
+      unitType,
+      priceBasis,
+      weightPerUnit: effectiveWeightPerUnit,
+      pricePerKg: unitPrice, // compat legado
+      unitPrice,
+      totalWeight,
+      total,
+      displayString,
+    };
+  },
+
+  async saveOrderToSheets(orderData, vendorName) {
+    const endpoint =
+      import.meta.env.VITE_ORDER_SYNC_ENDPOINT ||
+      import.meta.env.VITE_ORDER_SYNC_WEBHOOK ||
+      '';
+
+    // Integração opcional: sem endpoint configurado, só ignora.
+    if (!endpoint) {
+      return { success: false, skipped: true, reason: 'missing-endpoint' };
+    }
+
+    const payload = {
+      ...orderData,
+      vendor_name: vendorName || orderData?.vendor_name || '',
+      source: 'sercarne-web',
+      synced_at: new Date().toISOString(),
+    };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Falha no sync externo (${res.status}): ${errText || res.statusText}`);
+    }
+
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    return { success: true, payload: body };
+  },
+
+  async confirmOrder(orderId, token) {
+    if (!orderId) throw new Error('Pedido inválido.');
+    if (!token) throw new Error('Link de confirmação inválido ou expirado.');
+
+    const { data: order, error } = await supabase
+      .from('pedidos')
+      .select('id, items, total_value, status')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (error) throw new Error(`Erro ao localizar pedido: ${error.message}`);
+    if (!order) throw new Error('Pedido não encontrado.');
+
+    const currentStatus = normalizeOrderStatus(order.status);
+    const alreadyConfirmed = currentStatus === ORDER_STATUS.CONFIRMADO;
+
+    if (!alreadyConfirmed) {
+      const { error: updateErr } = await supabase
+        .from('pedidos')
+        .update({ status: ORDER_STATUS.CONFIRMADO, updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+
+      if (updateErr) throw new Error(`Erro ao confirmar pedido: ${updateErr.message}`);
+    }
+
+    let items = order.items;
+    if (typeof items === 'string') {
+      try {
+        items = JSON.parse(items);
+      } catch {
+        items = [];
+      }
+    }
+
+    return {
+      order: {
+        id: order.id,
+        items: Array.isArray(items) ? items : [],
+        total: Number(order.total_value || 0),
+      },
+    };
+  },
+
+  async getOrders(role, userKey, filters = {}) {
+    let query = supabase
+      .from('pedidos')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const normalizedRole = String(role || 'public').toLowerCase();
+    const isAdmin = normalizedRole === 'admin';
+    const vendorKey = onlyDigits(userKey);
+
+    if (!isAdmin) {
+      if (!vendorKey) return [];
+      query = query.eq('vendor_id', vendorKey);
+    }
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.fromDate) {
+      query = query.gte('delivery_date', filters.fromDate);
+    }
+
+    if (filters?.toDate) {
+      query = query.lte('delivery_date', filters.toDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  },
+
+  async createOrder(roleOrPayload, userKey, orderData) {
+    // Compatibilidade:
+    // 1) createOrder(role, userKey, orderData)
+    // 2) createOrder(legacyPayload)
+    const calledWithLegacyPayload =
+      roleOrPayload &&
+      typeof roleOrPayload === 'object' &&
+      !Array.isArray(roleOrPayload) &&
+      orderData === undefined;
+
+    if (calledWithLegacyPayload) {
+      const legacy = roleOrPayload;
+      const normalizedRole = String(legacy?.role || 'public').toLowerCase();
+      const clientData = legacy?.clientData || {};
+      const vendorKey = onlyDigits(legacy?.vendor_id || legacy?.userKey || userKey);
+      const deliveryDate = onlyISODate(legacy?.deliveryDate || legacy?.delivery_date);
+      const legacyItems = Array.isArray(legacy?.items) ? legacy.items : [];
+
+      const items = legacyItems.map((entry) => {
+        if (entry?.product) {
+          const product = entry.product;
+          const quantity = Number(entry.quantity ?? entry.quantidade ?? 1);
+          const calc = this.calculateLineItem(product, quantity, normalizedRole);
+
+          return {
+            sku: product?.sku || product?.codigo,
+            codigo: product?.codigo || product?.sku,
+            name: product?.descricao || product?.name || 'Produto',
+            quantity_unit: quantity,
+            quantity,
+            quantity_kg: calc.totalWeight,
+            price_per_kg: calc.pricePerKg,
+            unit_price: calc.unitPrice,
+            price_basis: calc.priceBasis,
+            total: calc.total,
+          };
+        }
+
+        return entry;
+      });
+
+      const payload = {
+        vendor_id: normalizedRole === 'public' ? 'WEBSITE' : (vendorKey || 'VENDOR'),
+        vendor_name: legacy?.vendor_name || (normalizedRole === 'public' ? 'Cliente Site' : 'Vendedor'),
+        client_id: String(clientData?.cnpj || clientData?.id || legacy?.client_id || 'GUEST'),
+        client_name: clientData?.nomeFantasia || clientData?.razaoSocial || legacy?.client_name || 'Cliente',
+        client_cnpj: String(clientData?.cnpj || legacy?.client_cnpj || 'N/A').replace(/\D/g, ''),
+        route_id: legacy?.route_id || legacy?.route_code || null,
+        route_name: legacy?.route_name || clientData?.municipio || clientData?.cidade || 'ROTA_SITE',
+        delivery_date: deliveryDate,
+        delivery_city: clientData?.municipio || clientData?.cidade || legacy?.delivery_city || null,
+        cutoff: legacy?.cutoff || '17:00',
+        items,
+        total_value: Number(legacy?.total || legacy?.total_value || 0),
+        total_weight: Number(legacy?.total_weight || 0),
+        observations: legacy?.observations || '',
+        status: normalizeOrderStatus(legacy?.status || ORDER_STATUS.ENVIADO),
+      };
+
+      const id = await this.saveOrderToSupabase(payload);
+      return { success: true, id };
+    }
+
+    const normalizedRole = String(roleOrPayload || 'public').toLowerCase();
+    const input = orderData || {};
+    const vendorKey = onlyDigits(input?.vendor_id || userKey);
+
+    const payload = {
+      ...input,
+      vendor_id:
+        normalizedRole === 'public'
+          ? 'WEBSITE'
+          : normalizedRole === 'admin'
+          ? (input?.vendor_id || vendorKey || 'ADMIN')
+          : (vendorKey || input?.vendor_id || 'VENDOR'),
+      status: normalizeOrderStatus(input?.status || ORDER_STATUS.ENVIADO),
+    };
+
+    const id = await this.saveOrderToSupabase(payload);
+    return { success: true, id };
+  },
+
+  async cancelOrder(orderId) {
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ status: ORDER_STATUS.CANCELADO, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
   async getProducts(role) {
     // ✅ BUMP do cache pra não ficar preso no antigo
-    const cacheKey = `${CACHE_PREFIX}products_v8_3_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
+    const cacheKey = `${CACHE_PREFIX}products_v8_4_1_pct_unit_fix_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
     const cached = this._getCache(cacheKey);
     if (cached) return cached;
 
@@ -110,7 +382,7 @@ export const schlosserApi = {
      * ✅ Colunas usadas (SHEETS):
      * D  = Código produto
      * I  = Peso médio
-     * V,W,X,Y,AA = Tabelas (TAB0, TAB5, TAB4, TAB1, TAB3)
+     * V,W,X,Y,Z,AA = Tabelas (TAB0, TAB5, TAB4, TAB1, TAB2, TAB3)
      *
      * AE = 1ª foto limpa
      * AF = 1ª foto bruta (fallback)
@@ -130,7 +402,7 @@ export const schlosserApi = {
 
     // ⚠️ range até BH é obrigatório
     const query =
-      'SELECT D, I, V, W, X, Y, AA, AE, BE, BG, AF, BF, BH, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
+      'SELECT D, I, V, W, X, Y, Z, AA, AE, BE, BG, AF, BF, BH, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
 
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
       SHEET_NAME
@@ -183,19 +455,20 @@ export const schlosserApi = {
             TAB5: parseNum(row[3]),
             TAB4: parseNum(row[4]),
             TAB1: parseNum(row[5]),
-            TAB3: parseNum(row[6]),
+            TAB2: parseNum(row[6]),
+            TAB3: parseNum(row[7]),
           };
 
           const weight = parseNum(row[1]);
 
           // --- IMAGENS (Manual: AE/AF, BE/BF, BG/BH) ---
-          const img1 = cleanStr(row[7]);   // AE
-          const img2 = cleanStr(row[8]);   // BE
-          const img3 = cleanStr(row[9]);   // BG
+          const img1 = cleanStr(row[8]);   // AE
+          const img2 = cleanStr(row[9]);   // BE
+          const img3 = cleanStr(row[10]);  // BG
 
-          const raw1 = cleanStr(row[10]);  // AF
-          const raw2 = cleanStr(row[11]);  // BF
-          const raw3 = cleanStr(row[12]);  // BH
+          const raw1 = cleanStr(row[11]);  // AF
+          const raw2 = cleanStr(row[12]);  // BF
+          const raw3 = cleanStr(row[13]);  // BH
 
           const imagesRaw = [
             img1 || raw1,
@@ -210,9 +483,9 @@ export const schlosserApi = {
           let isBrandImage = false;
 
           // --- MARCA (AG limpa, AH bruta fallback) + nome (AI) ---
-          const brandClean = cleanStr(row[13]); // AG
-          const brandRaw = cleanStr(row[14]);   // AH
-          const brandName = cleanStr(row[15]);  // AI
+          const brandClean = cleanStr(row[14]); // AG
+          const brandRaw = cleanStr(row[15]);   // AH
+          const brandName = cleanStr(row[16]);  // AI
 
           const brandToUse = brandClean || brandRaw || '';
           const brandImage = brandToUse ? this._processImageUrl(brandToUse) : '';
@@ -222,18 +495,24 @@ export const schlosserApi = {
             isBrandImage = true;
           }
 
-          const descAK = cleanStr(row[16]); // AK
-          const descAL = cleanStr(row[17]); // AL
-          const tipoVenda = String(row[18] || 'UND').toUpperCase(); // AC
-          const descE = cleanStr(row[19]);  // E
+          const descAK = cleanStr(row[17]); // AK
+          const descAL = cleanStr(row[18]); // AL
+          const descE = cleanStr(row[20]);  // E
 
           const desc = descAK || descAL || descE || 'Produto sem descrição';
 
           let descComplementar = descAL;
           if (desc === descAL) descComplementar = '';
 
+          const tipoVenda = resolveProductUnitType({
+            codigo: sku,
+            tipoVenda: row[19], // AC
+            descricao: desc,
+            descricao_complementar: descComplementar,
+          }, 'UND');
+
           // AX = visível
-          const axValue = row[20];
+          const axValue = row[21];
           let isVisible = false;
           if (axValue === true) {
             isVisible = true;
@@ -409,19 +688,19 @@ export const schlosserApi = {
       console.warn(`[Supabase] Campos faltando: ${missing.join(', ')}`);
     }
 
+    const vendorIdRaw = String(orderData?.vendor_id || '').toUpperCase();
+    const isGuestOrder = vendorIdRaw === 'WEBSITE' || vendorIdRaw === 'GUEST';
     const { data: authData, error: authErr } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
-    
-    console.log('[saveOrderToSupabase] AUTH UID:', uid);
-    
-    if (authErr || !uid) {
+    const uid = orderData?.vendor_uid || authData?.user?.id || null;
+
+    if ((authErr || !uid) && !isGuestOrder) {
       console.error('[saveOrderToSupabase] Sem sessão autenticada:', authErr);
       throw new Error('Você precisa estar logado para finalizar o pedido.');
     }
     
     const payload = {
-      // ✅ força o vendor_uid correto (RLS exige isso)
-      vendor_uid: uid,
+      // Em pedidos autenticados usamos uid do Supabase; em pedido público fica null.
+      vendor_uid: uid || null,
     
       vendor_id: orderData.vendor_id,
       vendor_name: orderData.vendor_name,
@@ -437,13 +716,26 @@ export const schlosserApi = {
       total_value: orderData.total_value,
       total_weight: orderData.total_weight,
       observations: orderData.observations,
-      status: orderData.status || 'PEDIDO ENVIADO',
+      status: normalizeOrderStatus(orderData.status || ORDER_STATUS.ENVIADO),
     };
 
     const { data, error } = await supabase.from('pedidos').insert([payload]).select('id').single();
 
     if (error) {
       console.error('[Supabase] Insert error:', error);
+
+      // Fallback operacional para pedido público: tenta envio externo quando configurado.
+      if (isGuestOrder) {
+        try {
+          const sync = await this.saveOrderToSheets(payload, payload.vendor_name);
+          if (sync?.success) {
+            return `GUEST-${Date.now()}`;
+          }
+        } catch (syncErr) {
+          console.error('[Supabase] Guest fallback sync error:', syncErr);
+        }
+      }
+
       throw new Error(`Erro ao salvar no banco: ${error.message}`);
     }
 
@@ -529,6 +821,31 @@ export const schlosserApi = {
     };
   },
 
+  async calculateStockForDates(codigo, _baseStock = 0, dates = []) {
+    const sku = String(codigo || '').trim();
+    const targetDates = Array.isArray(dates) ? dates : [dates];
+
+    const results = [];
+    for (const date of targetDates) {
+      const dateISO = onlyISODate(date) || String(date || '').split('T')[0];
+      if (!dateISO) {
+        results.push({ date: '', available: 0, base: 0, entradas: 0, pedidos: 0 });
+        continue;
+      }
+
+      const breakdown = await getStockBreakdown(sku, dateISO);
+      results.push({
+        date: dateISO,
+        available: breakdown.available || 0,
+        base: breakdown.base || 0,
+        entradas: breakdown.entradas || 0,
+        pedidos: breakdown.pedidos || 0,
+      });
+    }
+
+    return results;
+  },
+
   async getIncomingStock() {
     return [];
   },
@@ -582,7 +899,7 @@ export const checkRLSPolicies = async () => {
   return report;
 };
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   window.schlosserApi = schlosserApi;
   window.schlosserDebug = { debugSupabaseData, checkRLSPolicies };
 }

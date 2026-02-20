@@ -40,6 +40,9 @@
   - `UND`: preco por `kg`, peso na coluna `I`.
   - `CX`: preco por `kg`, peso fixo de `10kg`.
   - `PCT`: preco por `pct`, peso fixo por pacote na coluna `I`.
+- Inclusao da regra de transferencia:
+  - `TAB2` (coluna `Z`) aplicada para usuario nivel `3`.
+- Exibicao de "Tabela aplicada" restrita para usuario nivel `5+`.
 - Documentacao versionada de governanca:
   - `docs/VERSAO_ATUAL.md`
   - `docs/CHECKLIST_VALIDACAO_SCHLOSSER_PRO_V8.4.1.md`

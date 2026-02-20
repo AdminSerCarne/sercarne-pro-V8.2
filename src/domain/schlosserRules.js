@@ -44,14 +44,35 @@ export const schlosserRules = {
    */
   getTabelaAplicada: (qtdUNDTotalCarrinho, user, tabelasDisponiveis) => {
     const publicPrice = Number(tabelasDisponiveis?.TAB3) || 0;
+    const transferPrice = Number(tabelasDisponiveis?.TAB2) || 0;
+    const floorTab5 = Number(tabelasDisponiveis?.TAB5) || 0;
+    const userLevel = Number(
+      user?.Nivel ??
+      user?.nivel ??
+      user?.nivel_usuario ??
+      user?.nivelUsuario
+    );
+
+    const applyFloor = (value) => {
+      const n = Number(value) || 0;
+      if (floorTab5 > 0 && (!n || n < floorTab5)) return floorTab5;
+      return n;
+    };
 
     // Sem login: sempre TAB3
-    if (!user) return { price: publicPrice, tabName: 'TAB3' };
+    if (!user) {
+      const price = applyFloor(publicPrice);
+      return { price, tabName: price === floorTab5 && floorTab5 > 0 ? 'TAB5' : 'TAB3' };
+    }
 
     let price = publicPrice;
     let tabName = 'TAB3';
 
-    if (qtdUNDTotalCarrinho === 1 && Number(tabelasDisponiveis?.TAB1) > 0) {
+    // Regra especial: nível 3 usa TAB2 (transferência) direto ao logar
+    if (Number.isFinite(userLevel) && userLevel === 3 && transferPrice > 0) {
+      price = transferPrice;
+      tabName = 'TAB2';
+    } else if (qtdUNDTotalCarrinho === 1 && Number(tabelasDisponiveis?.TAB1) > 0) {
       price = Number(tabelasDisponiveis.TAB1);
       tabName = 'TAB1';
     } else if (
@@ -66,9 +87,17 @@ export const schlosserRules = {
       tabName = 'TAB4';
     }
 
-    // Fallback: sempre TAB3
-    if (!price || price <= 0) return { price: publicPrice, tabName: 'TAB3' };
-    return { price, tabName };
+    // Piso absoluto: nunca vender abaixo da TAB5
+    const flooredPrice = applyFloor(price);
+    if (!flooredPrice || flooredPrice <= 0) {
+      const fallback = applyFloor(publicPrice);
+      return { price: fallback, tabName: fallback === floorTab5 && floorTab5 > 0 ? 'TAB5' : 'TAB3' };
+    }
+
+    return {
+      price: flooredPrice,
+      tabName: flooredPrice === floorTab5 && floorTab5 > 0 ? 'TAB5' : tabName,
+    };
   },
 
   formatarCalculo: (und, pesoMedio, precoKg) => {
