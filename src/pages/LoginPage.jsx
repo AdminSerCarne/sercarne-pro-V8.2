@@ -10,6 +10,7 @@ import { Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { motion } from 'framer-motion';
+import { resolveHomeRoute } from '@/domain/accessProfile';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -21,19 +22,7 @@ const LoginPage = () => {
   // Handle redirection if already authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading && user) {
-      const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
-      const tipo = String(roleRaw).toLowerCase();
-      
-      // Logic requested: if "vendedor" -> /vendedor, else -> /admin
-      // Also handling clients to avoid sending them to admin
-      if (tipo.includes('vendedor') || tipo.includes('representante')) {
-        navigate('/vendedor');
-      } else if (tipo.includes('admin') || tipo.includes('gestor')) {
-        navigate('/admin');
-      } else {
-        // Fallback for clients or others
-        navigate('/catalog');
-      }
+      navigate(resolveHomeRoute(user));
     }
   }, [isAuthenticated, authLoading, user, navigate]);
 

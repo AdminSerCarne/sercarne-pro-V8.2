@@ -1,27 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, ShoppingCart, LogOut, BarChart3, Package, Menu, X, LogIn } from 'lucide-react';
-console.log("[Navigation] ARQUIVO CARREGADO (topo do module)");
+import { Home, ShoppingCart, LogOut, BarChart3, Package, Menu, X, LogIn } from 'lucide-react';
 import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { Button } from '@/components/ui/button';
+import { resolveHomeRoute, resolveUserRole } from '@/domain/accessProfile';
 
 const Navigation = () => {
-  console.log("[Navigation] COMPONENTE RENDERIZOU");
   const navigate = useNavigate();
   const location = useLocation();
-  //const { user, logout, isAdmin, isVendor, isPublic, isAuthenticated } = useAuth();
   const { user, logout, isAuthenticated } = useSupabaseAuth();
   
-  const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? "";
-  const role = String(roleRaw).trim().toLowerCase();
-  
-  const isAdmin = role === "admin" || user?.app_login === "/admin";
-  const isVendor = role === "vendedor" || user?.app_login === "/vendedor";
+  const role = resolveUserRole(user);
+  const homeRoute = resolveHomeRoute(user);
+  const isAdmin = role === "admin";
+  const isVendor = role === "vendor";
   const isPublic = !isAuthenticated;
-  
-  console.log("[Navigation] user =", user);
-  console.log("[Navigation] roleRaw/role =", { roleRaw, role });
-  console.log("[Navigation] flags =", { isAuthenticated, isPublic, isAdmin, isVendor });
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -34,18 +27,16 @@ const Navigation = () => {
   }
   const menuItems = [
     ...(isAdmin ? [
-      { icon: BarChart3, label: 'Dashboard', path: '/admin' },
-      { icon: Package, label: 'Pedidos', path: '/admin' },
+      { icon: BarChart3, label: 'Dashboard', path: '/vendedor' },
+      { icon: Package, label: 'Admin', path: '/admin' },
     ] : []),
     ...(isVendor ? [
-      { icon: Home, label: 'Dashboard', path: '/dashboard' },
+      { icon: Home, label: 'Dashboard', path: homeRoute === '/catalog' ? '/vendedor' : homeRoute },
     ] : []),
-    ...(isPublic || (!isAuthenticated) ? [
-      { icon: Package, label: 'Catálogo', path: '/cliente' },
+    ...(isPublic || role === 'public' ? [
+      { icon: Package, label: 'Catálogo', path: '/catalog' },
     ] : []),
   ];
-
-  console.log("[Navigation] isVendor =", isVendor);
 
   return (
     <nav className="bg-[#1a1a1a] text-white shadow-lg sticky top-0 z-50">
@@ -91,7 +82,7 @@ const Navigation = () => {
                 <div className="text-right">
                   <p className="text-sm font-semibold text-white">{user?.usuario || user?.name}</p>
                   <p className="text-xs text-[#FF8C42] uppercase font-bold tracking-wider">
-                    {user?.role || user?.tipo_de_Usuario || (user?.app_login === "/vendedor" ? "Vendedor" : "")}
+                    {user?.tipo_de_Usuario || user?.tipo_usuario || user?.role || ''}
                   </p>
                 </div>
                 <div className="h-8 w-px bg-gray-700"></div>
@@ -150,8 +141,8 @@ const Navigation = () => {
               {isAuthenticated ? (
                 <div className="flex items-center px-3">
                   <div className="ml-3">
-                    <div className="text-base font-medium leading-none text-white">{user?.name}</div>
-                    <div className="text-sm font-medium leading-none text-gray-400 mt-1">{user?.role}</div>
+                    <div className="text-base font-medium leading-none text-white">{user?.usuario || user?.name}</div>
+                    <div className="text-sm font-medium leading-none text-gray-400 mt-1">{user?.tipo_de_Usuario || user?.role}</div>
                   </div>
                   <button
                     onClick={handleLogout}

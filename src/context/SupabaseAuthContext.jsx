@@ -4,6 +4,14 @@ import { supabase } from "@/lib/customSupabaseClient";
 const SupabaseAuthContext = createContext(null);
 
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
+const toBool = (value) => {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (['true', '1', 'sim', 'yes', 'y', 'ativo'].includes(normalized)) return true;
+  if (['false', '0', 'nao', 'não', 'no', 'inativo'].includes(normalized)) return false;
+  return false;
+};
 
 export function SupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -62,20 +70,20 @@ export function SupabaseAuthProvider({ children }) {
   const bootstrap = async () => {
     setLoading(true);
     try {
-          const { data } = await supabase.auth.getSession();
-          const sess = data?.session || null;
-          
-          setSession(sess);
-          setAuthUser(sess?.user || null);
-          
-          const email = sess?.user?.email || null;
-          const profile = await loadProfileByAuthEmail(email);
-          if (profile) setUser(profile);
-          
-          // Só faz metadata se estiver autenticado
-          if (sess?.user) {
-            await ensureJwtMetadata(profile);
-          }
+      const { data } = await supabase.auth.getSession();
+      const sess = data?.session || null;
+
+      setSession(sess);
+      setAuthUser(sess?.user || null);
+
+      const email = sess?.user?.email || null;
+      const profile = await loadProfileByAuthEmail(email);
+      setUser(profile || null);
+
+      // Só faz metadata se estiver autenticado
+      if (sess?.user) {
+        await ensureJwtMetadata(profile);
+      }
     } finally {
       setLoading(false);
     }
@@ -85,18 +93,18 @@ export function SupabaseAuthProvider({ children }) {
     bootstrap();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-        setSession(newSession);
-        setAuthUser(newSession?.user || null);
-        
-        const email = newSession?.user?.email || null;
-        const profile = await loadProfileByAuthEmail(email);
-        if (profile) setUser(profile);
-        
-        if (newSession?.user) {
-          await ensureJwtMetadata(profile);
-        }
-        
-        setLoading(false);
+      setSession(newSession);
+      setAuthUser(newSession?.user || null);
+
+      const email = newSession?.user?.email || null;
+      const profile = await loadProfileByAuthEmail(email);
+      setUser(profile || null);
+
+      if (newSession?.user) {
+        await ensureJwtMetadata(profile);
+      }
+
+      setLoading(false);
     });
 
     return () => sub?.subscription?.unsubscribe?.();
@@ -104,62 +112,58 @@ export function SupabaseAuthProvider({ children }) {
 
   // LOGIN: recebe login (telefone) + senha
   const login = async (loginInput, password) => {
-    console.log("[SupabaseAuthContext] login() chamado ✅", loginInput);
-    console.log("[LOGIN] raw loginInput:", loginInput);
     const loginNorm = onlyDigits(loginInput);
-    console.log("[LOGIN] loginNorm (onlyDigits):", loginNorm);
-    
+
     if (!loginNorm) {
-      console.error("[LOGIN] loginNorm vazio -> nenhum dígito encontrado no loginInput");
       return { success: false, error: "Login inválido (sem dígitos)" };
     }
+
     try {
       if (!loginNorm) {
         return { success: false, error: "Informe um login válido (ex: 55-99962-7055)." };
       }
 
       // Busca auth_email pelo login na tabela usuarios
-      console.log("[LOGIN] buscando usuario na tabela usuarios. login =", loginNorm);
       const { data: profile, error: profileErr } = await supabase
         .from("usuarios")
         .select("*")
         .eq("login", loginNorm)
         .limit(1)
         .maybeSingle();
-      console.log("[LOGIN] retorno usuarios.data:", profile);
-      console.log("[LOGIN] retorno usuarios.error:", profileErr);
+
       if (profileErr) {
-        console.error("[LOGIN] erro ao consultar tabela usuarios:", profileErr);
-        return { success: false, error: "Erro consultando usuarios" };
+        return { success: false, error: "Erro ao consultar usuários." };
       }
-      
+
       if (!profile) {
-        console.error("[LOGIN] nenhum registro encontrado na tabela usuarios para login:", loginNorm);
         return { success: false, error: "Usuário não encontrado" };
       }
 
-      console.log("[LOGIN] profile.auth_email:", profile.auth_email);
-      const email = profile?.auth_email || null;
-      if (!email) {
-        console.error("[LOGIN] auth_email vazio no profile");
-        return { success: false, error: "Usuário sem e-mail vinculado!" };
+      const isActive = toBool(profile?.ativo ?? profile?.active ?? true);
+      if (!isActive) {
+        return { success: false, error: "Usuário inativo. Contate o administrador." };
       }
-     // if (findErr) return { success: false, error: `Erro consultando usuários: ${findErr.message}` };
-      if (!profile?.auth_email) return { success: false, error: "Usuário sem auth_email cadastrado." };
+
+      const email = String(profile?.auth_email || '').trim().toLowerCase();
+      if (!email) {
+        return {
+          success: false,
+          error: "Usuário sem vínculo de autenticação (auth_email). Vincule o e-mail no cadastro para liberar o login."
+        };
+      }
 
       // Faz sign-in no Supabase Auth com email + senha
-      console.log("[LOGIN] email usado:", profile.auth_email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      console.log("[LOGIN] retorno data:", data);
-      console.log("[LOGIN] retorno error:", error);
-      
+
       if (error) {
-        console.error("[LOGIN] signInWithPassword falhou:", error.message, error);
+        return {
+          success: false,
+          error: "Credenciais inválidas no Supabase Auth para este usuário."
+        };
       }
-      if (error) return { success: false, error: error.message };
 
       setSession(data.session);
       setAuthUser(data.session?.user || null);
@@ -170,7 +174,6 @@ export function SupabaseAuthProvider({ children }) {
 
       return { success: true };
     } catch (e) {
-      console.error("[LOGIN] EXCEPTION:", e);
       return { success: false, error: e?.message || "Falha no login." };
     }
   };

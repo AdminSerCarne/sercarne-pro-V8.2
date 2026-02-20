@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
+import { resolveHomeRoute, resolveUserRole } from '@/domain/accessProfile';
 
 const Header = () => {
   const { user, login, logout } = useSupabaseAuth();
@@ -35,11 +36,11 @@ const Header = () => {
       
       setIsLoggingIn(true);
       try {
-          const { error } = await login(loginEmail, loginPassword);
-          if (error) {
+          const result = await login(loginEmail, loginPassword);
+          if (!result?.success) {
               toast({
                   title: "Falha no login",
-                  description: "Verifique suas credenciais e tente novamente.",
+                  description: result?.error || "Verifique suas credenciais e tente novamente.",
                   variant: "destructive"
               });
           } else {
@@ -62,14 +63,14 @@ const Header = () => {
     ];
 
     if (user) {
-        const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
-        const role = String(roleRaw).toLowerCase();
-        if (role.includes('admin') || role.includes('gestor') || role.includes('vendedor') || role.includes('representante')) {
-             // ✅ CORREÇÃO: rota real é /vendedor
-             links.push({ name: 'Dashboard', path: '/vendedor' });
+        const role = resolveUserRole(user);
+        const homeRoute = resolveHomeRoute(user);
+
+        if (homeRoute !== '/catalog') {
+             links.push({ name: 'Dashboard', path: homeRoute });
         }
         
-        if (role.includes('admin')) {
+        if (role === 'admin') {
              links.push({ name: 'Admin', path: '/admin' });
         }
     }
