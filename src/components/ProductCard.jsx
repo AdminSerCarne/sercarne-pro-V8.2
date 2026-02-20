@@ -202,6 +202,8 @@ const ProductCard = ({ product }) => {
   const metrics = processedItems?.[0] || {};
   const estimatedWeight = Number(metrics.estimatedWeight || 0);
   const estimatedSubtotal = Number(metrics.estimatedValue || 0);
+  const displayWeightLabel = isPctSale || unit === 'CX' ? 'Peso Padrão:' : 'Médio:';
+  const displayWeightValue = unit === 'CX' ? 10 : Number(product?.pesoMedio || 0);
 
   const isWeightValid = Number(product?.pesoMedio || 0) > 0;
   const isPriceValid = Number(price || 0) > 0;
@@ -598,7 +600,7 @@ const ProductCard = ({ product }) => {
 
           <div className="inline-flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded text-[10px] font-bold text-gray-500 uppercase mt-1">
             <Scale size={10} />
-            {isPctSale ? 'Peso Padrão:' : 'Médio:'} {formatWeight(product?.pesoMedio || 0)} kg
+            {displayWeightLabel} {formatWeight(displayWeightValue)} kg
           </div>
         </div>
 
