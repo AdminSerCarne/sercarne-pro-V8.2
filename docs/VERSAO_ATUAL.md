@@ -15,6 +15,8 @@
   `docs/ORIGENS/MANUAL_V8.4_GOOGLE_DOC_EXPORT_2026-02-20.txt`
 - Index de fontes brutas:
   `docs/ORIGENS/INDEX.md`
+- Checklist contratual (representacao 2026):
+  `docs/CHECKLIST_CONTRATUAL_REPRESENTACAO_2026.md`
 
 ## Regra de interpretacao
 
