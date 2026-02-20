@@ -374,7 +374,7 @@ export const schlosserApi = {
 
   async getProducts(role) {
     // ✅ BUMP do cache pra não ficar preso no antigo
-    const cacheKey = `${CACHE_PREFIX}products_v8_4_1_pct_unit_fix_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
+    const cacheKey = `${CACHE_PREFIX}products_v8_4_2_pct_cx_priority_fix_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
     const cached = this._getCache(cacheKey);
     if (cached) return cached;
 

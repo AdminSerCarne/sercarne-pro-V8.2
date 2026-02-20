@@ -206,8 +206,10 @@ const ProductCard = ({ product }) => {
   const displayWeightValue = unit === 'CX' ? 10 : Number(product?.pesoMedio || 0);
 
   const isWeightValid = Number(product?.pesoMedio || 0) > 0;
+  const hasFixedWeight = unit === 'CX' || unit === 'KG' || isPctSale;
+  const canShowEstimatedWeight = isWeightValid || hasFixedWeight;
   const isPriceValid = Number(price || 0) > 0;
-  const canShowSubtotal = isPriceValid && (isWeightValid || isPctSale);
+  const canShowSubtotal = isPriceValid && canShowEstimatedWeight;
 
   // ✅ Helper: pegar data de entrega real (aceita Date ou string)
   const getDeliveryDateStr = () => {
@@ -696,7 +698,7 @@ const ProductCard = ({ product }) => {
           <div className="bg-[#FFF8F4] rounded px-2 py-1.5 space-y-0.5 border border-orange-100/50">
             <div className="flex justify-between text-[10px] text-gray-500">
               <span>Peso Est.:</span>
-              <span className="font-medium text-gray-700">{isWeightValid ? `${formatWeight(estimatedWeight)} kg` : '--'}</span>
+              <span className="font-medium text-gray-700">{canShowEstimatedWeight ? `${formatWeight(estimatedWeight)} kg` : '--'}</span>
             </div>
             <div className="flex justify-between text-[10px] text-gray-500 border-t border-orange-100 pt-0.5 mt-0.5">
               <span className="font-bold text-[#FF6B35]">Subtotal:</span>

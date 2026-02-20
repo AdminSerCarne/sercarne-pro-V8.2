@@ -42,6 +42,10 @@ const detectByDescription = (description) => {
 };
 
 export const resolveProductUnitType = (product, fallback = 'UND') => {
+  const code = String(product?.codigo ?? product?.sku ?? '').trim();
+  const override = UNIT_CODE_OVERRIDES[code];
+  if (override) return override;
+
   const explicitRaw =
     product?.unitType ??
     product?.tipoVenda ??
@@ -49,19 +53,21 @@ export const resolveProductUnitType = (product, fallback = 'UND') => {
     product?.unit_type ??
     product?.unidade ??
     product?.unit;
-  const explicitRawStr = String(explicitRaw ?? '').trim();
-  if (explicitRawStr) return normalizeUnitType(explicitRawStr, fallback);
 
-  const code = String(product?.codigo ?? product?.sku ?? '').trim();
-  const override = UNIT_CODE_OVERRIDES[code];
-  if (override) return override;
+  const explicitRawStr = String(explicitRaw ?? '').trim();
+  const explicitNormalized = explicitRawStr ? normalizeUnitType(explicitRawStr, fallback) : '';
 
   const byDescription = detectByDescription(
     [product?.descricao, product?.descricao_complementar, product?.name, product?.nome]
       .filter(Boolean)
       .join(' ')
   );
-  if (byDescription) return byDescription;
+
+  if (byDescription && (!explicitNormalized || explicitNormalized === 'UND')) {
+    return byDescription;
+  }
+
+  if (explicitNormalized) return explicitNormalized;
 
   const numericCode = Number(code);
   if (!Number.isNaN(numericCode) && numericCode >= 410000) return 'CX';

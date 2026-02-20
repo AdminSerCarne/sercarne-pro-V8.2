@@ -10,6 +10,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useCart } from '@/context/CartContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
 import { getTodayISODateLocal } from '@/utils/dateUtils';
 
@@ -18,6 +19,62 @@ import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 
 // ✅ FONTE OFICIAL (manual): schlosserApi GVIZ
 import { schlosserApi } from '@/services/schlosserApi';
+
+const normalizeTextUpper = (value) => String(value ?? '').trim().toUpperCase();
+
+const getBrandLabel = (product) => {
+  const raw = String(product?.brandName ?? product?.marca ?? '').trim();
+  return raw || 'SEM MARCA';
+};
+
+const isComboProduct = (product) => {
+  const explicitCombo = String(product?.combo ?? '').trim().toLowerCase();
+  if (['true', '1', 'sim', 'yes'].includes(explicitCombo)) return true;
+
+  const text = normalizeTextUpper(
+    [
+      product?.descricao,
+      product?.descricao_complementar,
+      product?.name,
+      product?.nome,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+
+  return ['COMBO', 'KIT', 'MIX', 'CESTA', 'SORTIDO'].some((token) => text.includes(token));
+};
+
+const getProductTypeLabel = (product) => {
+  const explicitType = String(product?.tipo_produto ?? product?.tipoProduto ?? product?.especie ?? '').trim();
+  if (explicitType) return explicitType.toUpperCase();
+
+  const text = normalizeTextUpper(
+    [
+      product?.descricao,
+      product?.descricao_complementar,
+      product?.name,
+      product?.nome,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+
+  if (text.includes('BOVIN') || text.includes('VACA') || text.includes('NOVILHO')) return 'BOVINO';
+  if (text.includes('SUIN') || text.includes('PORCO')) return 'SUINO';
+  if (text.includes('FRANGO') || text.includes('AVE') || text.includes('GALINHA')) return 'AVES';
+  if (text.includes('OVIN') || text.includes('CORDEIRO')) return 'OVINO/CORDEIRO';
+  if (text.includes('PEIXE') || text.includes('TILAPIA') || text.includes('SALMAO')) return 'PEIXES';
+  if (text.includes('LINGUICA') || text.includes('EMBUT')) return 'EMBUTIDOS';
+  return 'OUTROS';
+};
+
+const getStockValueFromMap = (product, stockMapToday) => {
+  const code = String(product?.codigo || '').trim();
+  const stockMapValue = Number(stockMapToday?.[code]);
+  if (!Number.isNaN(stockMapValue)) return stockMapValue;
+  return Number(product?.estoque_und || 0);
+};
 
 const CatalogPage = () => {
   const { user } = useSupabaseAuth();
@@ -61,6 +118,10 @@ const CatalogPage = () => {
   }, [refreshProducts]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [brandFilter, setBrandFilter] = useState('all');
+  const [comboFilter, setComboFilter] = useState('all');
+  const [productTypeFilter, setProductTypeFilter] = useState('all');
+  const [sortMode, setSortMode] = useState('stock_desc');
   const [isRefreshingStock, setIsRefreshingStock] = useState(false);
 
   // ✅ mapa: { [codigo]: disponivelHoje }
@@ -182,35 +243,89 @@ const CatalogPage = () => {
     run();
   }, [products, stockUpdateTrigger, stockTick]);
 
+  const brandOptions = useMemo(() => {
+    const set = new Set();
+    (products || []).forEach((product) => set.add(getBrandLabel(product)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [products]);
+
+  const productTypeOptions = useMemo(() => {
+    const set = new Set();
+    (products || []).forEach((product) => set.add(getProductTypeLabel(product)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [products]);
+
+  useEffect(() => {
+    if (brandFilter !== 'all' && !brandOptions.includes(brandFilter)) {
+      setBrandFilter('all');
+    }
+  }, [brandFilter, brandOptions]);
+
+  useEffect(() => {
+    if (productTypeFilter !== 'all' && !productTypeOptions.includes(productTypeFilter)) {
+      setProductTypeFilter('all');
+    }
+  }, [productTypeFilter, productTypeOptions]);
+
+  const clearCatalogFilters = useCallback(() => {
+    setSearchTerm('');
+    setBrandFilter('all');
+    setComboFilter('all');
+    setProductTypeFilter('all');
+    setSortMode('stock_desc');
+  }, []);
+
   // -----------------------------------
   // Filter + Sort
   // -----------------------------------
   const filteredAndSortedProducts = useMemo(() => {
     const term = String(searchTerm || '').toLowerCase();
 
-    const filtered = (products || []).filter(p =>
-      (p.codigo && String(p.codigo).includes(searchTerm)) ||
-      (p.descricao && String(p.descricao).toLowerCase().includes(term)) ||
-      (p.nome && String(p.nome).toLowerCase().includes(term)) ||
-      (p.name && String(p.name).toLowerCase().includes(term))
-    );
+    const filtered = (products || []).filter((product) => {
+      const matchesSearch =
+        !term ||
+        (product.codigo && String(product.codigo).includes(searchTerm)) ||
+        (product.descricao && String(product.descricao).toLowerCase().includes(term)) ||
+        (product.nome && String(product.nome).toLowerCase().includes(term)) ||
+        (product.name && String(product.name).toLowerCase().includes(term));
+      if (!matchesSearch) return false;
+
+      const brandLabel = getBrandLabel(product);
+      if (brandFilter !== 'all' && brandLabel !== brandFilter) return false;
+
+      const combo = isComboProduct(product);
+      if (comboFilter === 'combo' && !combo) return false;
+      if (comboFilter === 'avulso' && combo) return false;
+
+      const typeLabel = getProductTypeLabel(product);
+      if (productTypeFilter !== 'all' && typeLabel !== productTypeFilter) return false;
+
+      return true;
+    });
 
     const sorted = [...filtered].sort((a, b) => {
-      const codeA = String(a.codigo || '').trim();
-      const codeB = String(b.codigo || '').trim();
+      const stockA = getStockValueFromMap(a, stockMapToday);
+      const stockB = getStockValueFromMap(b, stockMapToday);
 
-      const stockA = Number(stockMapToday?.[codeA]);
-      const stockB = Number(stockMapToday?.[codeB]);
+      if (sortMode === 'stock_asc') {
+        if (stockA !== stockB) return stockA - stockB;
+      } else if (sortMode === 'name_asc') {
+        const nameA = String(a.descricao || a.nome || a.name || '').toLowerCase();
+        const nameB = String(b.descricao || b.nome || b.name || '').toLowerCase();
+        const byName = nameA.localeCompare(nameB, 'pt-BR');
+        if (byName !== 0) return byName;
+      } else if (sortMode === 'code_asc') {
+        const byCode = String(a.codigo || '').localeCompare(String(b.codigo || ''), 'pt-BR');
+        if (byCode !== 0) return byCode;
+      } else {
+        if (stockB !== stockA) return stockB - stockA;
+      }
 
-      const safeA = !isNaN(stockA) ? stockA : Number(a.estoque_und || 0);
-      const safeB = !isNaN(stockB) ? stockB : Number(b.estoque_und || 0);
-
-      if (safeB !== safeA) return safeB - safeA;
       return String(a.codigo || '').localeCompare(String(b.codigo || ''));
     });
 
     return sorted;
-  }, [products, searchTerm, stockMapToday]);
+  }, [products, searchTerm, stockMapToday, brandFilter, comboFilter, productTypeFilter, sortMode]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200">
@@ -266,30 +381,96 @@ const CatalogPage = () => {
                   ? (userLevel >= 5 ? `Tabela Aplicada: ${user.tab_preco || 'Padrão'}` : 'Preços personalizados ativos')
                   : 'Faça login para ver preços personalizados'}
                 {loadingSortStock ? ' • Ordenando por estoque do dia…' : ''}
+                {!loading && !error ? ` • ${filteredAndSortedProducts.length}/${products.length} itens` : ''}
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar por código ou descrição..."
-                  className="w-full pl-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:ring-[#FF6B35] focus:border-[#FF6B35] rounded-md"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
+            <div className="w-full md:w-auto flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+                <div className="relative w-full sm:w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar por código ou descrição..."
+                    className="w-full pl-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:ring-[#FF6B35] focus:border-[#FF6B35] rounded-md"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    className="flex-1 sm:flex-none border-[#FF6B35]/30 text-[#FF6B35] hover:bg-[#FF6B35]/10 hover:text-[#FF6B35]"
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshingStock}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingStock ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
+                <Select value={brandFilter} onValueChange={setBrandFilter}>
+                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue placeholder="Marca" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
+                    <SelectItem value="all">Marca: todas</SelectItem>
+                    {brandOptions.map((brand) => (
+                      <SelectItem key={brand} value={brand}>
+                        {brand}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={comboFilter} onValueChange={setComboFilter}>
+                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue placeholder="Combo" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
+                    <SelectItem value="all">Combo: todos</SelectItem>
+                    <SelectItem value="combo">Somente combos</SelectItem>
+                    <SelectItem value="avulso">Somente avulsos</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
+                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue placeholder="Tipo de produto" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
+                    <SelectItem value="all">Tipo: todos</SelectItem>
+                    {productTypeOptions.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortMode} onValueChange={setSortMode}>
+                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue placeholder="Ordenação" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
+                    <SelectItem value="stock_desc">Maior estoque</SelectItem>
+                    <SelectItem value="stock_asc">Menor estoque</SelectItem>
+                    <SelectItem value="name_asc">Descrição A-Z</SelectItem>
+                    <SelectItem value="code_asc">Código A-Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end">
                 <Button
-                  variant="outline"
-                  className="flex-1 sm:flex-none border-[#FF6B35]/30 text-[#FF6B35] hover:bg-[#FF6B35]/10 hover:text-[#FF6B35]"
-                  onClick={handleManualRefresh}
-                  disabled={isRefreshingStock}
+                  variant="ghost"
+                  className="text-xs text-gray-400 hover:text-white"
+                  onClick={clearCatalogFilters}
                 >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingStock ? 'animate-spin' : ''}`} />
-                  Atualizar
+                  Limpar filtros
                 </Button>
               </div>
             </div>
@@ -326,7 +507,7 @@ const CatalogPage = () => {
             {!loading && !error && filteredAndSortedProducts.length === 0 && (
               <div className="text-center py-20 text-gray-600">
                 <p className="text-lg">Nenhum produto encontrado com os filtros atuais.</p>
-                <Button variant="link" onClick={() => setSearchTerm('')} className="text-[#FF6B35]">Limpar busca</Button>
+                <Button variant="link" onClick={clearCatalogFilters} className="text-[#FF6B35]">Limpar filtros</Button>
               </div>
             )}
           </div>
