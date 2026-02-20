@@ -137,7 +137,11 @@ export const calculateOrderMetrics = (items) => {
     // 5) Estimated weight
     // Se já vier do banco (ex.: total_weight / estimatedWeight), respeita
     const rawEstimatedWeight = pick(item.estimatedWeight, item.total_weight, item.totalWeight);
+    const rawEstimatedWeightLegacy = pick(item.quantity_kg, item.quantidade_kg);
     let estimatedWeightFromDB = parseNumberBR(rawEstimatedWeight);
+    if (!(estimatedWeightFromDB > 0)) {
+      estimatedWeightFromDB = parseNumberBR(rawEstimatedWeightLegacy);
+    }
 
     let estimatedWeight = 0;
 
@@ -157,7 +161,7 @@ export const calculateOrderMetrics = (items) => {
 
     // 6) Estimated value
     // Se já vier do banco (ex.: total_value / estimatedValue), respeita
-    const rawEstimatedValue = pick(item.estimatedValue, item.total_value, item.totalValue);
+    const rawEstimatedValue = pick(item.estimatedValue, item.total_value, item.totalValue, item.total, item.subtotal);
     let estimatedValueFromDB = parseNumberBR(rawEstimatedValue);
 
     const estimatedValue =

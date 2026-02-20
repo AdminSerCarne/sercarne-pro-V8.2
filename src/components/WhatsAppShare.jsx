@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
+import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
+import { normalizeUnitType } from '@/domain/unitType';
 
 const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label }) => {
   if (!order) return null;
+  const PLATFORM_URL = 'https://sercarne.com';
 
   const handleShare = () => {
     const formatMoney = (val) =>
@@ -70,13 +73,19 @@ const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label
     const normalizeItemsForMetrics = (items) => {
       return items.map((it) => {
         const quantity = n(pick(it.quantity, it.quantidade, it.quantity_unit, 0)) || 0;
-        const unitType = pick(it.unitType, it.unit_type, 'UND');
+        const unitType = normalizeUnitType(pick(it.unitType, it.unit_type, 'UND'));
 
         const averageWeight = n(pick(it.averageWeight, it.pesoMedio, it.estimatedWeight, it.total_weight, 0));
         const pricePerKg = n(pick(it.pricePerKg, it.price_per_kg, 0));
+        const priceBasis = String(pick(it.priceBasis, it.price_basis, unitType === 'PCT' ? 'PCT' : 'KG')).toUpperCase();
 
         // Alguns fluxos salvam "name" ou "descricao"
         const name = pick(it.name, it.descricao, 'ITEM');
+
+        const fallbackWeight = averageWeight * (quantity || 1);
+        const fallbackValue = priceBasis === 'PCT'
+          ? pricePerKg * (quantity || 1)
+          : averageWeight * pricePerKg * (quantity || 1);
 
         // Mantém o máximo de compatibilidade com calculateOrderMetrics
         return {
@@ -86,16 +95,18 @@ const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label
           unitType,
           averageWeight,
           pricePerKg,
+          priceBasis,
 
           // campos opcionais, se existirem
-          estimatedWeight: n(pick(it.estimatedWeight, it.total_weight, averageWeight * (quantity || 1))),
-          estimatedValue: n(pick(it.estimatedValue, it.total_value, averageWeight * pricePerKg * (quantity || 1))),
+          estimatedWeight: n(pick(it.estimatedWeight, it.total_weight, it.quantity_kg, fallbackWeight)),
+          estimatedValue: n(pick(it.estimatedValue, it.total_value, it.total, fallbackValue)),
         };
       });
     };
 
     const rawItems = parseItemsSafe(order.items);
     const normalizedItems = normalizeItemsForMetrics(rawItems);
+    const statusText = normalizeOrderStatus(order.status || ORDER_STATUS.ENVIADO);
 
     // ---- 3) Recalcula métricas com itens já OK ----
     const { processedItems, totalWeight, totalValue } = calculateOrderMetrics(normalizedItems);
@@ -106,10 +117,11 @@ const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label
       const avgW = n(item.averageWeight);
       const estW = n(item.estimatedWeight);
       const pKg = n(item.pricePerKg);
+      const basis = String(item.priceBasis || (normalizeUnitType(unit, 'UND') === 'PCT' ? 'PCT' : 'KG')).toUpperCase();
       const sub = n(item.estimatedValue);
 
       return `* ${String(item.name || 'ITEM').toUpperCase()}
-  Qtd: ${qty} ${unit} | Peso Médio: ${avgW.toFixed(3)}kg | Peso Est.: ${estW.toFixed(2)}kg | Preço: ${formatMoney(pKg)}/kg | Subtotal: ${formatMoney(sub)}`;
+  Qtd: ${qty} ${unit} | Peso Médio: ${avgW.toFixed(3)}kg | Peso Est.: ${estW.toFixed(2)}kg | Preço: ${formatMoney(pKg)}/${basis.toLowerCase()} | Subtotal: ${formatMoney(sub)}`;
     }).join('\n\n');
 
     // Vendedor (só mostra se existir)
@@ -119,6 +131,9 @@ const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label
         : null;
 
     const lines = [
+      `Olá! Obrigado pela preferência na Schlosser.`,
+      `Segue o resumo comercial do seu pedido:`,
+      ``,
       `◆ PEDIDO SCHLOSSER`,
       `* Pedido: #${(order.id || 'NOVO').slice(0, 8).toUpperCase()}`,
       `--------------------------------`,
@@ -139,7 +154,10 @@ const WhatsAppShare = ({ order, variant = "ghost", size = "sm", className, label
       `* Valor Total Est.: ${formatMoney(totalValue)}`,
       `--------------------------------`,
       `*Peso e valor aproximados. Valores finais na NF.`,
-      `◆ Status: ${(order.status || 'PENDENTE').toUpperCase()}`
+      `◆ Status: ${statusText}`,
+      ``,
+      `Estamos à disposição para ajustes e novos pedidos.`,
+      `Acesse a plataforma oficial: ${PLATFORM_URL}`
     ];
 
     const message = lines.join('\n');

@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
-import { Package, User, Calendar, DollarSign, MapPin } from 'lucide-react';
+import { Package, User, Calendar, MapPin } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
+import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 
 const OrderDetailsModal = ({ isOpen, onClose, order }) => {
-  if (!order) return null;
-  
-  const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const { processedItems, totalValue: computedTotalValue } = useMemo(
+    () => calculateOrderMetrics(order?.items),
+    [order?.items]
+  );
 
+  if (!order) return null;
+  const normalizedStatus = normalizeOrderStatus(order.status);
+  const statusText =
+    normalizedStatus === ORDER_STATUS.ENVIADO ? 'PEDIDO ENVIADO' :
+    normalizedStatus === ORDER_STATUS.CONFIRMADO ? 'PEDIDO CONFIRMADO' :
+    normalizedStatus === ORDER_STATUS.SAIU_PARA_ENTREGA ? 'SEU PEDIDO SAIU PARA ENTREGA' :
+    normalizedStatus === ORDER_STATUS.ENTREGUE ? 'PEDIDO ENTREGUE' :
+    normalizedStatus === ORDER_STATUS.CANCELADO ? 'CANCELADO' :
+    normalizedStatus;
+  
+  const formatMoney = (val) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
 
   const formatCpfCnpj = (value) => {
     const digits = String(value || '').replace(/\D/g, '');
@@ -42,9 +57,13 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
                 </DialogDescription>
             </div>
             <Badge variant="outline" className={`
-                ${order.status === 'CONFIRMADO' ? 'text-green-500 border-green-500 bg-green-500/10' : 'text-yellow-500 border-yellow-500 bg-yellow-500/10'}
+                ${normalizedStatus === ORDER_STATUS.CONFIRMADO || normalizedStatus === ORDER_STATUS.SAIU_PARA_ENTREGA || normalizedStatus === ORDER_STATUS.ENTREGUE
+                  ? 'text-green-500 border-green-500 bg-green-500/10'
+                  : normalizedStatus === ORDER_STATUS.CANCELADO
+                  ? 'text-red-500 border-red-500 bg-red-500/10'
+                  : 'text-yellow-500 border-yellow-500 bg-yellow-500/10'}
             `}>
-                {order.status || 'PENDENTE'}
+                {statusText}
             </Badge>
           </div>
         </DialogHeader>
@@ -94,21 +113,21 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
 
             <div className="bg-[#1a1a1a] rounded-lg border border-white/5 flex flex-col h-full overflow-hidden">
                 <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest p-4 border-b border-white/5 flex items-center gap-2 bg-[#222]">
-                    <Package size={14} className="text-[#FF6B35]"/> Itens ({order.items?.length || 0})
+                    <Package size={14} className="text-[#FF6B35]"/> Itens ({processedItems.length || 0})
                 </h3>
                 <ScrollArea className="flex-1 max-h-[300px]">
                     <div className="divide-y divide-white/5">
-                        {order.items && order.items.map((item, idx) => (
+                        {processedItems.map((item, idx) => (
                             <div key={idx} className="p-3 hover:bg-white/5 transition-colors">
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-medium text-sm text-white line-clamp-2 w-3/4">{item.name || item.descricao}</span>
                                     <span className="font-bold text-xs bg-white/10 px-1.5 py-0.5 rounded text-gray-300">
-                                        {item.quantity || item.quantidade} {item.unitType || item.unit || 'UND'}
+                                        {item.quantity || 0} {item.unitType || 'UND'}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center text-xs text-gray-500">
-                                    <span>Cód: {item.sku || item.codigo}</span>
-                                    <span className="text-[#FF6B35] font-medium">{formatMoney(item.total || item.valorTotal || 0)}</span>
+                                    <span>Cód: {item.sku || item.codigo || '-'}</span>
+                                    <span className="text-[#FF6B35] font-medium">{formatMoney(item.estimatedValue)}</span>
                                 </div>
                             </div>
                         ))}
@@ -117,7 +136,7 @@ const OrderDetailsModal = ({ isOpen, onClose, order }) => {
                 <div className="p-4 bg-[#222] border-t border-white/5">
                     <div className="flex justify-between items-center">
                         <span className="font-bold text-gray-300">VALOR TOTAL</span>
-                        <span className="font-bold text-xl text-[#FF6B35]">{formatMoney(order.total_value)}</span>
+                        <span className="font-bold text-xl text-[#FF6B35]">{formatMoney(order.total_value || computedTotalValue)}</span>
                     </div>
                 </div>
             </div>

@@ -1,17 +1,24 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Building2, Truck, Calendar, MapPin, User, Weight, DollarSign, Phone, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 
 /**
  * Updated PrintOrder with specific Schlosser contact info and layout
  */
 const PrintOrder = ({ order }) => {
+  const { processedItems, totalWeight: computedWeight, totalValue: computedValue } = useMemo(
+    () => calculateOrderMetrics(order?.items),
+    [order?.items]
+  );
+
   if (!order) return null;
 
   const LOGO_URL = "https://horizons-cdn.hostinger.com/f5e592ff-4b11-4a06-90fa-42f9bf225481/e979c9ad073c28cd8ccd3102f1dd9c56.jpg";
-  const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatMoney = (val) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val || 0));
   const formatDate = (date) => date ? format(new Date(date), 'dd/MM/yyyy') : '-';
   const formatDateTime = (date) => date ? format(new Date(date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : '-';
 
@@ -94,19 +101,24 @@ const PrintOrder = ({ order }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {order.items && order.items.map((item, idx) => (
+            {processedItems.map((item, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                <td className="py-2 px-2 font-mono text-xs text-gray-600">{item.sku}</td>
+                <td className="py-2 px-2 font-mono text-xs text-gray-600">{item.sku || item.codigo || '-'}</td>
                 <td className="py-2 px-2">
-                  <span className="font-bold text-sm block text-gray-800">{item.name}</span>
-                  {item.quantity_kg && <span className="text-[10px] text-gray-500">Peso aprox: {Number(item.quantity_kg).toFixed(2)}kg</span>}
+                  <span className="font-bold text-sm block text-gray-800">{item.name || item.descricao || '-'}</span>
+                  {Number(item.estimatedWeight || 0) > 0 && (
+                    <span className="text-[10px] text-gray-500">Peso aprox: {Number(item.estimatedWeight || 0).toFixed(2)}kg</span>
+                  )}
                 </td>
                 <td className="py-2 px-2 text-center">
-                    <span className="font-bold text-sm">{item.quantity_unit}</span>
-                    <span className="text-[10px] uppercase ml-1 text-gray-500">{item.unit_type}</span>
+                    <span className="font-bold text-sm">{Number(item.quantity || 0)}</span>
+                    <span className="text-[10px] uppercase ml-1 text-gray-500">{item.unitType || 'UND'}</span>
                 </td>
-                <td className="py-2 px-2 text-right text-sm">{formatMoney(item.price_per_kg || 0)}</td>
-                <td className="py-2 px-2 text-right font-bold text-sm">{formatMoney(item.total || 0)}</td>
+                <td className="py-2 px-2 text-right text-sm">
+                  {formatMoney(Number(item.unitPrice || item.pricePerKg || 0))}
+                  <span className="text-[10px] text-gray-500 ml-1">/{String(item.priceBasis || 'KG').toLowerCase()}</span>
+                </td>
+                <td className="py-2 px-2 text-right font-bold text-sm">{formatMoney(Number(item.estimatedValue || 0))}</td>
               </tr>
             ))}
           </tbody>
@@ -124,11 +136,11 @@ const PrintOrder = ({ order }) => {
         <div className="w-[240px] space-y-2 bg-gray-50 p-4 rounded border border-gray-200">
             <div className="flex justify-between py-1 border-b border-gray-200">
                 <span className="flex items-center gap-2 text-xs uppercase font-bold text-gray-600"><Weight size={12}/> Peso Total Estimado</span>
-                <span className="font-mono font-bold text-sm">{Number(order.total_weight || 0).toFixed(2)} kg</span>
+                <span className="font-mono font-bold text-sm">{Number(order.total_weight || computedWeight || 0).toFixed(2)} kg</span>
             </div>
             <div className="flex justify-between pt-2 items-center">
                 <span className="flex items-center gap-2 font-bold text-sm uppercase"><DollarSign size={14}/> VALOR TOTAL</span>
-                <span className="font-bold text-xl">{formatMoney(order.total_value || 0)}</span>
+                <span className="font-bold text-xl">{formatMoney(order.total_value || computedValue || 0)}</span>
             </div>
         </div>
       </div>
