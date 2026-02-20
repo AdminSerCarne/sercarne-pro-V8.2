@@ -27,6 +27,51 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { schlosserApi } from '@/services/schlosserApi';
+import { routeCapacityService } from '@/services/routeCapacityService';
+import { ORDER_STATUS } from '@/domain/orderStatus';
+import { normalizeUnitType } from '@/domain/unitType';
+import { toISODateLocal } from '@/utils/dateUtils';
+
+const parseCutoff = (cutoffStr) => {
+  const clean = String(cutoffStr || '').replace('h', '').trim();
+  const [hh, mm] = clean.split(':').map((x) => parseInt(x, 10));
+  return {
+    h: Number.isFinite(hh) ? hh : 17,
+    m: Number.isFinite(mm) ? mm : 0,
+  };
+};
+
+const isPastCutoffForDelivery = (deliveryDateISO, cutoffStr) => {
+  const { h, m } = parseCutoff(cutoffStr);
+  const delivery = new Date(`${deliveryDateISO}T00:00:00`);
+  if (isNaN(delivery.getTime())) return true;
+
+  const cutoff = new Date(delivery);
+  cutoff.setDate(cutoff.getDate() - 1);
+  cutoff.setHours(h, m, 0, 0);
+  return new Date() > cutoff;
+};
+
+const getValidDeliveryDays = (diasEntregaRaw) => {
+  const dayStr = String(diasEntregaRaw || '').toUpperCase();
+  const map = { DOM: 0, SEG: 1, TER: 2, QUA: 3, QUI: 4, SEX: 5, SAB: 6 };
+  const out = [];
+  Object.entries(map).forEach(([key, val]) => {
+    if (dayStr.includes(key)) out.push(val);
+  });
+  if (out.length === 0 && (dayStr.includes('DIARIO') || dayStr.includes('DIÁRIO'))) {
+    return [1, 2, 3, 4, 5];
+  }
+  return out;
+};
+
+const isAllowedRouteDate = (deliveryDateISO, diasEntregaRaw) => {
+  const allowedDays = getValidDeliveryDays(diasEntregaRaw);
+  if (allowedDays.length === 0) return true;
+  const date = new Date(`${deliveryDateISO}T00:00:00`);
+  if (isNaN(date.getTime())) return false;
+  return allowedDays.includes(date.getDay());
+};
 
 const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const {
@@ -74,12 +119,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const unitsToDiscount = Math.max(0, DISCOUNT_THRESHOLD - totalQuantity);
 
   const normalizeDateToISO = (dateLike) => {
-    if (!dateLike) return '';
-    // já vem "YYYY-MM-DD" do selector normalmente
-    if (typeof dateLike === 'string') return dateLike.split('T')[0];
-    const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
-    if (isNaN(d.getTime())) return String(dateLike).split('T')[0];
-    return d.toISOString().split('T')[0];
+    return toISODateLocal(dateLike) || String(dateLike || '').split('T')[0];
   };
   const lastValidationKeyRef = useRef('');
   const validatingRef = useRef(false);
@@ -165,9 +205,10 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       const codigo = String(i.codigo || i.sku || '').trim();
 
       const quantity = Number(i.quantity || 0);
-      const unitType = String(i.unitType || 'UND').toUpperCase();
+      const unitType = normalizeUnitType(i.unitType || 'UND');
+      const priceBasis = String(i.priceBasis || (unitType === 'PCT' ? 'PCT' : 'KG')).toUpperCase();
 
-      const pricePerKg = Number(i.pricePerKg || 0);
+      const unitPrice = Number(i.unitPrice || i.pricePerKg || 0);
       const pesoMedio = Number(i.averageWeight || i.pesoMedio || 0);
 
       const estimatedWeight = Number(i.estimatedWeight || 0);
@@ -184,7 +225,9 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         quantidade: quantity,
         quantity,
         unitType,
-        pricePerKg,
+        pricePerKg: unitPrice, // compat legado
+        unitPrice,
+        priceBasis,
         pesoMedio,
         averageWeight: pesoMedio,
         estimatedWeight,
@@ -193,7 +236,9 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         // chaves “legadas” (já estava salvando — mantemos por compatibilidade)
         quantity_unit: quantity,
         unit_type: unitType,
-        price_per_kg: pricePerKg,
+        price_per_kg: unitPrice,
+        unit_price: unitPrice,
+        price_basis: priceBasis,
         total_weight: estimatedWeight,
         total_value: estimatedValue,
       };
@@ -225,6 +270,32 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
 
       if (!deliveryInfo?.delivery_date) {
         toast({ variant: "destructive", title: "Selecione uma data de entrega" });
+        return;
+      }
+
+      const deliveryDateISO = normalizeDateToISO(deliveryInfo.delivery_date);
+      if (!deliveryDateISO) {
+        toast({ variant: "destructive", title: "Data de entrega inválida" });
+        return;
+      }
+
+      const cutoffRef = deliveryInfo.cutoff || deliveryInfo.route_cutoff || selectedRoute?.corte_ate || '17:00';
+      const routeDays = selectedRoute?.dias_entrega || deliveryInfo?.route_days || '';
+      if (!isAllowedRouteDate(deliveryDateISO, routeDays)) {
+        toast({
+          variant: "destructive",
+          title: "Data inválida para a rota",
+          description: "Selecione uma data permitida para a rota escolhida.",
+        });
+        return;
+      }
+
+      if (isPastCutoffForDelivery(deliveryDateISO, cutoffRef)) {
+        toast({
+          variant: "destructive",
+          title: "Prazo de corte excedido",
+          description: `Para entrega em ${deliveryDateISO}, o corte foi ${cutoffRef} do dia anterior.`,
+        });
         return;
       }
 
@@ -262,6 +333,42 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         return;
       }
 
+      const routeNameForCapacity =
+        deliveryInfo.route_name ||
+        selectedRoute?.descricao_grupo_rota ||
+        guestCity ||
+        'SEM ROTA';
+
+      const capacitySnapshot = await routeCapacityService.getRouteCapacitySnapshot({
+        deliveryDate: deliveryDateISO,
+        routeName: routeNameForCapacity,
+        pendingWeightKg: Number(totalWeight || 0),
+        pendingClientName: user
+          ? (selectedClient?.nomeFantasia || selectedClient?.razaoSocial || selectedClient?.cnpj || 'CLIENTE')
+          : (guestName || 'CLIENTE SITE'),
+      });
+
+      if (capacitySnapshot.isOverCapacity) {
+        const suggestion = await routeCapacityService.suggestNextValidDeliveryDate(
+          routeNameForCapacity,
+          deliveryDateISO
+        );
+
+        toast({
+          variant: 'destructive',
+          title: 'Capacidade da rota excedida',
+          description: routeCapacityService.formatCapacityBlockMessage(capacitySnapshot, suggestion),
+        });
+        return;
+      }
+
+      if (capacitySnapshot.extraTruckRequired && capacitySnapshot.largestClient) {
+        toast({
+          title: 'Carga elevada por cliente',
+          description: `Cliente ${capacitySnapshot.largestClient.clientName} ultrapassa 2500kg. Sugestão: abrir caminhão/rota extra para esta entrega.`,
+        });
+      }
+
       const itemsPayload = buildOrderItemsPayload();
 
       
@@ -283,24 +390,21 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         : (guestCnpj || '');
       
       const clientDoc = String(clientDocRaw).replace(/\D/g, '');
+      const vendorLogin = String(user?.login || '').replace(/\D/g, '');
 
-      console.log('selectedClient:', selectedClient);
-      console.log('clientDocRaw:', clientDocRaw);
-      console.log('clientDoc:', clientDoc);
-      
       const orderData = {
-        vendor_id: user ? (user.id || 'VENDOR') : 'WEBSITE',
+        vendor_id: user ? (vendorLogin || user.id || 'VENDOR') : 'WEBSITE',
         vendor_name: user ? (user.usuario || user.nome || 'Vendedor') : 'Cliente Site',
         client_id: user ? (clientDoc || 'CLIENTE') : 'GUEST',
         client_name: user ? (selectedClient.nomeFantasia || selectedClient.razaoSocial) : guestName,
         client_cnpj: user ? (clientDoc || 'N/A') : (clientDoc || 'N/A'),
 
-        route_id: deliveryInfo.route_id || 'ROTA_SITE',
+        route_id: deliveryInfo.route_id || deliveryInfo.route_code || 'ROTA_SITE',
         route_name: deliveryInfo.route_name || guestCity,
 
-        delivery_date: normalizeDateToISO(deliveryInfo.delivery_date),
-        delivery_city: user ? (deliveryInfo.delivery_city || selectedClient.municipio) : guestCity,
-        cutoff: deliveryInfo.cutoff || '17:00',
+        delivery_date: deliveryDateISO,
+        delivery_city: user ? (deliveryInfo.delivery_city || deliveryInfo.route_city || selectedClient.municipio) : guestCity,
+        cutoff: deliveryInfo.cutoff || deliveryInfo.route_cutoff || '17:00',
 
         items: itemsPayload,
 
@@ -309,15 +413,14 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
 
         observations: user ? '' : `Contato: ${guestPhone}`,
 
-        // Vendedor confirma na hora; Site fica pendente
-        status: user ? 'CONFIRMADO' : 'PENDENTE'
+        status: ORDER_STATUS.ENVIADO
       };
 
       await schlosserApi.saveOrderToSupabase(orderData);
 
       toast({
         title: "Pedido Enviado!",
-        description: user ? "Confirmado com sucesso." : "Recebemos seu pedido. Entraremos em contato.",
+        description: user ? "Pedido enviado para confirmação." : "Recebemos seu pedido. Entraremos em contato.",
         className: "bg-green-600 text-white"
       });
 

@@ -30,6 +30,9 @@ import { useNavigate } from "react-router-dom";
 import { calculateOrderMetrics } from "@/utils/calculateOrderMetrics";
 import { calcularEstoqueData } from "@/utils/stockValidator";
 import { supabase } from "@/lib/customSupabaseClient";
+import { normalizeUnitType } from "@/domain/unitType";
+import { toISODateLocal } from "@/utils/dateUtils";
+import { routeCapacityService } from "@/services/routeCapacityService";
 
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
@@ -77,23 +80,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
 
   const getDeliveryDateISO = () => {
     const raw = deliveryInfo?.delivery_date || deliveryInfo?.date || deliveryInfo?.deliveryDate;
-    if (!raw) return null;
-
-    if (raw instanceof Date) {
-      if (isNaN(raw.getTime())) return null;
-      return raw.toISOString().split("T")[0];
-    }
-
-    const str = String(raw).trim();
-    if (!str) return null;
-
-    if (str.includes("T")) return str.split("T")[0];
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
-
-    return null;
+    return toISODateLocal(raw);
   };
 
   const performFinalValidation = async () => {
@@ -172,13 +159,38 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         throw new Error("Perfil interno sem login (telefone). Verifique public.usuarios.login.");
       }
 
+      const routeNameForCapacity = deliveryInfo?.route_name || "SEM ROTA";
+      const capacitySnapshot = await routeCapacityService.getRouteCapacitySnapshot({
+        deliveryDate: deliveryDateISO,
+        routeName: routeNameForCapacity,
+        pendingWeightKg: Number(totalWeight || 0),
+        pendingClientName: selectedClient?.nomeFantasia || selectedClient?.razaoSocial || selectedClient?.cnpj || "CLIENTE",
+      });
+
+      if (capacitySnapshot.isOverCapacity) {
+        const suggestion = await routeCapacityService.suggestNextValidDeliveryDate(
+          routeNameForCapacity,
+          deliveryDateISO
+        );
+        throw new Error(routeCapacityService.formatCapacityBlockMessage(capacitySnapshot, suggestion));
+      }
+
+      if (capacitySnapshot.extraTruckRequired && capacitySnapshot.largestClient) {
+        toast({
+          title: "Carga elevada por cliente",
+          description: `Cliente ${capacitySnapshot.largestClient.clientName} ultrapassa 2500kg. Sugerido caminhão extra dedicado.`,
+        });
+      }
+
       const itemsPayload = processedItems.map((item) => ({
         sku: item.codigo ?? item.sku,
         name: item.name,
         quantity_unit: item.quantity,
         unit_type: item.unitType,
         quantity_kg: item.estimatedWeight,
-        price_per_kg: item.pricePerKg,
+        price_per_kg: item.pricePerKg, // compat legado
+        unit_price: item.unitPrice ?? item.pricePerKg,
+        price_basis: item.priceBasis || (normalizeUnitType(item.unitType || 'UND') === 'PCT' ? 'PCT' : 'KG'),
         total: item.estimatedValue,
       }));
 
@@ -231,7 +243,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       clearCart();
       onClose();
 
-      // ✅ DASHBOARD NÃO SUMIR: /vendedor NÃO EXISTE -> usa /dashboard
+      // Após criar pedido, volta para o painel do vendedor.
       navigate("/vendedor");
     } catch (error) {
       console.error("Checkout Fatal Error:", error);
@@ -342,7 +354,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
                         {item.quantity} {item.unitType}
                       </span>
                       <div className="text-[10px] text-gray-500 font-mono">
-                        {Number(item.estimatedWeight || 0).toFixed(2)}kg est. × {formatMoney(item.pricePerKg)}
+                        {Number(item.estimatedWeight || 0).toFixed(2)}kg est. × {formatMoney(item.pricePerKg)} / {String(item.priceBasis || (normalizeUnitType(item.unitType || 'UND') === 'PCT' ? 'PCT' : 'KG')).toUpperCase()}
                       </div>
                     </div>
                   </div>

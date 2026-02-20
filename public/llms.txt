@@ -3,7 +3,7 @@
 - [Catálogo - Schlosser](/catalog): No description available
 - [Catálogo Inteligente - Schlosser](/clientedashboard): No description available
 - [Confirmação de Pedido - Schlosser Pro](/confirmacaopedidopublica): No description available
-- [Dashboard Admin - Sistema Schlosser](/admindashboard): No description available
+- [Dashboard Admin - Schlosser](/admindashboard): No description available
 - [Dashboard Vendas - Schlosser](/vendordashboard): No description available
 - [Dashboard Vendedor - Sistema Schlosser](/vendedordashboard): No description available
 - [Login - Schlosser](/login): No description available
