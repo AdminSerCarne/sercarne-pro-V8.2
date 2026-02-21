@@ -51,6 +51,7 @@ const ProductCard = ({ product }) => {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
   const didSwipeRef = React.useRef(false);
+  const didScrollRef = React.useRef(false);
   const [slideDir, setSlideDir] = useState('next'); // 'next' | 'prev'
 
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -95,12 +96,14 @@ const ProductCard = ({ product }) => {
   const SWIPE_THRESHOLD = 40; // sensibilidade (px)
   
   const onTouchStart = (e) => {
+    
     if (!gallery || gallery.length <= 1) return;
     const t = e.touches[0];
     touchStartX.current = t.clientX;
     touchEndX.current = t.clientX;
     touchStartY.current = t.clientY;
     touchEndY.current = t.clientY;
+    didScrollRef.current = false;
   };
   
   const onTouchMove = (e) => {
@@ -108,7 +111,13 @@ const ProductCard = ({ product }) => {
       const t = e.touches[0];
       touchEndX.current = t.clientX;
       touchEndY.current = t.clientY;
-  };
+    const dx = touchEndX.current - touchStartX.current;
+    const dy = touchEndY.current - touchStartY.current;
+    
+    if (Math.abs(dy) > VERTICAL_THRESHOLD && Math.abs(dy) > Math.abs(dx)) {
+      didScrollRef.current = true;
+    }
+  }
 
   const TAP_THRESHOLD = 8;        // toque real: mexeu muito pouco
   const VERTICAL_THRESHOLD = 14;  // scroll: mexeu o suficiente no Y
@@ -116,7 +125,11 @@ const ProductCard = ({ product }) => {
   const onTouchEnd = (e) => {
     const deltaX = touchEndX.current - touchStartX.current;
     const deltaY = touchEndY.current - touchStartY.current;
-  
+    if (didScrollRef.current) {
+      didScrollRef.current = false;
+      didSwipeRef.current = false;
+      return;
+    }
     // reset
     touchStartX.current = 0;
     touchEndX.current = 0;
@@ -416,8 +429,9 @@ const ProductCard = ({ product }) => {
         <button
           type="button"
           onClick={(e) => {
-            if (didSwipeRef.current) {
+            if (didSwipeRef.current || didScrollRef.current) {
               didSwipeRef.current = false;
+              didScrollRef.current = false;
               e.preventDefault();
               e.stopPropagation();
               return;
