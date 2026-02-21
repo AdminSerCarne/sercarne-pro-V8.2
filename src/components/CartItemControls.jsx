@@ -270,7 +270,7 @@ const CartItemControls = ({
       
           <div className="flex flex-col items-start justify-center">
             <span className="text-[10px] text-gray-400 font-semibold uppercase">PREÇO/KG</span>
-            <span className="font-semibold text-gray-800">
+            <span className="font-semibold text-[#FF6B35]">
               {pricePerKg > 0 ? `${formatMoneyBR(pricePerKg)}/kg` : '--'}
             </span>
           </div>
