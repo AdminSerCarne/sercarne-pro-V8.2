@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import ProductCard from '@/components/ProductCard';
@@ -87,6 +87,10 @@ const CatalogPage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const ITEMS_STEP = 24;
+  const [visibleCount, setVisibleCount] = useState(ITEMS_STEP);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef(null);
 
   // papel para schlosserApi (publico vs vendedor)
   const role = user ? 'vendedor' : 'publico';
@@ -121,6 +125,42 @@ const CatalogPage = () => {
     refreshProducts();
   }, [refreshProducts]);
 
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+  
+    // se já está mostrando tudo, não observa
+    if (visibleCount >= filteredAndSortedProducts.length) return;
+  
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+  
+        // evita disparos repetidos
+        if (isLoadingMore) return;
+  
+        setIsLoadingMore(true);
+  
+        setTimeout(() => {
+          setVisibleCount((prev) =>
+            Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+          );
+          setIsLoadingMore(false);
+        }, 150);
+      },
+      { root: null, rootMargin: "600px", threshold: 0 }
+    );
+  
+    observer.observe(el);
+  
+    return () => observer.disconnect();
+  }, [filteredAndSortedProducts.length, visibleCount, isLoadingMore]);
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_STEP);
+  }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('all');
   const [comboFilter, setComboFilter] = useState('all');
@@ -307,6 +347,10 @@ const CatalogPage = () => {
   const filteredAndSortedProducts = useMemo(() => {
     const term = String(searchTerm || '').toLowerCase();
 
+  const visibleProducts = useMemo(() => {
+    return filteredAndSortedProducts.slice(0, visibleCount);
+  }, [filteredAndSortedProducts, visibleCount]);
+    
     const filtered = (products || []).filter((product) => {
       const matchesSearch =
         !term ||
@@ -574,13 +618,25 @@ const CatalogPage = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredAndSortedProducts.map(product => (
+                {visibleProducts.map(product => (
                   <ProductCard
                     key={product.id || product.codigo}
                     product={product}
                   />
                 ))}
               </div>
+              {visibleCount < filteredAndSortedProducts.length && (
+              <div ref={loadMoreRef} className="flex justify-center items-center py-8 text-gray-500">
+                {isLoadingMore ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
+                    <span>Carregando mais...</span>
+                  </div>
+                ) : (
+                  <span>Role para carregar mais</span>
+                )}
+              </div>
+            )}
             )}
 
             {!loading && !error && filteredAndSortedProducts.length === 0 && (
