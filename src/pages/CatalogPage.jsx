@@ -125,42 +125,6 @@ const CatalogPage = () => {
     refreshProducts();
   }, [refreshProducts]);
 
-  useEffect(() => {
-    const el = loadMoreRef.current;
-    if (!el) return;
-  
-    // se já está mostrando tudo, não observa
-    if (visibleCount >= filteredAndSortedProducts.length) return;
-  
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting) return;
-  
-        // evita disparos repetidos
-        if (isLoadingMore) return;
-  
-        setIsLoadingMore(true);
-  
-        setTimeout(() => {
-          setVisibleCount((prev) =>
-            Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
-          );
-          setIsLoadingMore(false);
-        }, 150);
-      },
-      { root: null, rootMargin: "600px", threshold: 0 }
-    );
-  
-    observer.observe(el);
-  
-    return () => observer.disconnect();
-  }, [filteredAndSortedProducts.length, visibleCount, isLoadingMore]);
-
-  useEffect(() => {
-    setVisibleCount(ITEMS_STEP);
-  }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
-  
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('all');
   const [comboFilter, setComboFilter] = useState('all');
@@ -347,9 +311,7 @@ const CatalogPage = () => {
   const filteredAndSortedProducts = useMemo(() => {
     const term = String(searchTerm || '').toLowerCase();
 
-  const visibleProducts = useMemo(() => {
-    return filteredAndSortedProducts.slice(0, visibleCount);
-  }, [filteredAndSortedProducts, visibleCount]);
+  
     
     const filtered = (products || []).filter((product) => {
       const matchesSearch =
@@ -396,7 +358,47 @@ const CatalogPage = () => {
 
     return sorted;
   }, [products, searchTerm, stockMapToday, brandFilter, comboFilter, productTypeFilter, sortMode]);
+  
+  const visibleProducts = useMemo(() => {
+    return filteredAndSortedProducts.slice(0, visibleCount);
+  }, [filteredAndSortedProducts, visibleCount]);
 
+  useEffect(() => {
+    setVisibleCount(ITEMS_STEP);
+  }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
+
+useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+  
+    // se já está mostrando tudo, não observa
+    if (visibleCount >= filteredAndSortedProducts.length) return;
+  
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+  
+        // evita disparos repetidos
+        if (isLoadingMore) return;
+  
+        setIsLoadingMore(true);
+  
+        setTimeout(() => {
+          setVisibleCount((prev) =>
+            Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+          );
+          setIsLoadingMore(false);
+        }, 150);
+      },
+      { root: null, rootMargin: "600px", threshold: 0 }
+    );
+  
+    observer.observe(el);
+  
+    return () => observer.disconnect();
+  }, [filteredAndSortedProducts.length, visibleCount, isLoadingMore]);
+  
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200">
       <Helmet>
