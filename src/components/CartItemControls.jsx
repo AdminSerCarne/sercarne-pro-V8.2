@@ -255,25 +255,28 @@ const CartItemControls = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-gray-500 min-w-[180px]">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1" title="Peso Total Estimado">
-            <Scale size={10} />
-            <span className="font-medium text-gray-700">{metrics.formattedWeight || '--'} kg</span>
+      <div className="w-full bg-gray-100/70 rounded-md p-2 flex items-center justify-between gap-3">
+
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1" title="Peso Total Estimado">
+              <Scale size={10} />
+              <span className="font-medium text-gray-700">{metrics.formattedWeight || '--'} kg</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="font-medium text-gray-700">{metrics.formattedValue || '--'}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="font-medium text-gray-700">{metrics.formattedValue || '--'}</span>
+      
+          <div className="flex flex-col items-start justify-center">
+            <span className="text-[10px] text-gray-400 font-semibold uppercase">PREÇO/KG</span>
+            <span className="font-semibold text-gray-800">
+              {pricePerKg > 0 ? `${formatMoneyBR(pricePerKg)}/kg` : '--'}
+            </span>
           </div>
         </div>
       
-        <div className="flex flex-col items-center justify-center">
-          <span className="text-[10px] text-gray-400 font-semibold uppercase">Preço/kg</span>
-          <span className="font-semibold text-gray-800">
-            {pricePerKg > 0 ? `${formatMoneyBR(pricePerKg)}/kg` : '--'}
-          </span>
-        </div>
-      </div>
-
+        {/* Controle de quantidade (volta para a direita, como era antes) */}
         <div className="flex items-center bg-white rounded-md border border-gray-200 h-8 shadow-sm">
           <button
             onClick={() => handleUpdate(Number(item.quantidade || 0) - 1)}
@@ -283,7 +286,7 @@ const CartItemControls = ({
           >
             <Minus className="w-3 h-3" />
           </button>
-
+      
           <div className="w-10 text-center h-full flex items-center justify-center bg-white relative">
             {updating ? (
               <Loader2 className="w-3 h-3 animate-spin text-orange-500" />
@@ -293,7 +296,7 @@ const CartItemControls = ({
               </span>
             )}
           </div>
-
+      
           <button
             onClick={() => handleUpdate(Number(item.quantidade || 0) + 1)}
             disabled={updating}
@@ -303,6 +306,7 @@ const CartItemControls = ({
             <Plus className="w-3 h-3" />
           </button>
         </div>
+      </div>
 
       {/* ✅ Só faz sentido alertar "estoque insuficiente" se tiver data */}
       {isOverLimit && (
