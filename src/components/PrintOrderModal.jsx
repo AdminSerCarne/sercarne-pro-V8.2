@@ -141,8 +141,8 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
         
         {/* CSS for printing */}
         <style>{`
-          .print-modal-content button[data-radix-dialog-close],
-          .print-modal-content [data-radix-dialog-close] {
+          .print-modal-content > button.absolute.right-4.top-4,
+          .print-modal-content > button.absolute.top-4.right-4 {
             display: none !important;
           }
           @media print {
