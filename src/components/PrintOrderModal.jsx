@@ -7,7 +7,7 @@ import PrintOrder from './PrintOrder';
 const PrintOrderModal = ({ isOpen, onClose, order }) => {
   if (!order) return null;
   const printRef = useRef(null);
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!printRef.current) return;
   
     // Cria um iframe “invisível” só para impressão (evita bugs do modal/portal)
@@ -56,17 +56,54 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
     `);
     doc.close();
   
-    // Aguarda o iframe “assentar” e imprime
+    // Aguarda CSS + fontes + imagens carregarem antes de imprimir
+    const win = iframe.contentWindow;
+    if (!win) {
+      document.body.removeChild(iframe);
+      return;
+    }
+    
+    const waitForImages = () => {
+      const imgs = Array.from(win.document.images || []);
+      if (imgs.length === 0) return Promise.resolve();
+    
+      return Promise.all(
+        imgs.map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((res) => {
+            img.onload = () => res();
+            img.onerror = () => res();
+          });
+        })
+      );
+    };
+    
+    const waitForFonts = async () => {
+      try {
+        // nem todo navegador suporta, por isso o try
+        if (win.document.fonts && win.document.fonts.ready) {
+          await win.document.fonts.ready;
+        }
+      } catch (e) {
+        // ignora
+      }
+    };
+    
+    // dá tempo para os <link rel="stylesheet"> aplicarem layout
+    await new Promise((r) => setTimeout(r, 150));
+    await waitForFonts();
+    await waitForImages();
+    
+    // 2 frames para garantir reflow final
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    
+    win.focus();
+    win.print();
+    
+    // Remove depois de abrir a impressão
     setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-  
-      // Remove depois de abrir a impressão
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 500);
-    }, 50);
-  };
+      document.body.removeChild(iframe);
+    }, 800);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
