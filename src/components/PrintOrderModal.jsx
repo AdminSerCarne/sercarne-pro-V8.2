@@ -52,13 +52,30 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-        
-            /* Esconde tudo e mostra apenas a área de impressão */
-            body * {
-              visibility: hidden !important;
+            body > :not([data-radix-portal]) {
+              display: none !important;
             }
-            #print-area, #print-area * {
-              visibility: visible !important;
+            
+            /* O portal do Radix precisa existir no print */
+            [data-radix-portal] {
+              display: block !important;
+            }
+            
+            /* Dentro do portal, esconda tudo, menos o print-area */
+            [data-radix-portal] * {
+              display: none !important;
+            }
+            
+            #print-area,
+            #print-area * {
+              display: block !important;
+            }
+            #print-area {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              margin: 0 !important;
             }
         
             /* Neutraliza Radix/Shadcn Dialog (fixed + transform) durante impressão */
