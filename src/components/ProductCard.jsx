@@ -236,6 +236,13 @@ const ProductCard = ({ product }) => {
   const canShowEstimatedWeight = isWeightValid || hasFixedWeight;
   const isPriceValid = Number(price || 0) > 0;
   const canShowSubtotal = isPriceValid && canShowEstimatedWeight;
+  const displayPrice = useMemo(() => Number(Number(price || 0).toFixed(2)), [price]);
+  const displayEstimatedWeight = useMemo(() => Number(Number(estimatedWeight || 0).toFixed(2)), [estimatedWeight]);
+  
+  const displaySubtotal = useMemo(() => {
+    const q = Number(quantity || 0);
+    return Number((displayPrice * displayEstimatedWeight * q).toFixed(2));
+  }, [displayPrice, displayEstimatedWeight, quantity]);
 
   // ✅ Helper: pegar data de entrega real (aceita Date ou string)
   const getDeliveryDateStr = () => {
@@ -613,7 +620,7 @@ const ProductCard = ({ product }) => {
         <div className="mb-2">
           <div className="flex flex-col mb-1">
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-[#FF6B35]">{formatMoney(price)}</span>
+              <span className="text-2xl font-bold text-[#FF6B35]">{formatMoney(displayPrice)}</span>
               <span className="text-xs text-gray-400 font-bold uppercase">/ {isPctSale ? 'PCT' : 'KG'}</span>
             </div>
 
@@ -731,11 +738,11 @@ const ProductCard = ({ product }) => {
           <div className="bg-[#FFF8F4] rounded px-2 py-1.5 space-y-0.5 border border-orange-100/50">
             <div className="flex justify-between text-[10px] text-gray-500">
               <span>Peso Est.:</span>
-              <span className="font-medium text-gray-700">{canShowEstimatedWeight ? `${formatWeight(estimatedWeight)} kg` : '--'}</span>
+              <span className="font-medium text-gray-700">{canShowEstimatedWeight ? `${formatWeight(displayEstimatedWeight)} kg` : '--'}</span>
             </div>
             <div className="flex justify-between text-[10px] text-gray-500 border-t border-orange-100 pt-0.5 mt-0.5">
               <span className="font-bold text-[#FF6B35]">Subtotal:</span>
-              <span className="font-bold text-[#FF6B35]">{canShowSubtotal ? formatMoney(estimatedSubtotal) : '--'}</span>
+              <span className="font-bold text-[#FF6B35]">{canShowSubtotal ? formatMoney(displaySubtotal) : '--'}</span>
             </div>
           </div>
 
