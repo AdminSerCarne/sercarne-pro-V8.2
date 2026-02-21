@@ -4,6 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
+import { calculateCommissionSummary } from '@/domain/commissionPolicy';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -926,6 +927,17 @@ const VendorDashboard = () => {
   const totalOrders = orders.length;
   const totalPendentes = orders.filter((o) => normalizeStatus(o.status) === ORDER_STATUS.ENVIADO).length;
   const totalVendido = orders.reduce((acc, curr) => acc + (Number(curr.total_value) || 0), 0);
+  const commissionSummary = useMemo(
+    () => calculateCommissionSummary(filteredOrders, { userLevel }),
+    [filteredOrders, userLevel]
+  );
+  const commissionByOrderId = useMemo(() => {
+    const map = new Map();
+    commissionSummary.rows.forEach((row) => {
+      map.set(String(row.orderId), row);
+    });
+    return map;
+  }, [commissionSummary.rows]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8 font-sans">
@@ -958,7 +970,7 @@ const VendorDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <Card className="bg-[#121212] border-white/10 text-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-400">Total de Pedidos</CardTitle>
@@ -988,6 +1000,40 @@ const VendorDashboard = () => {
               <div className="text-2xl font-bold text-green-500">{formatMoney(totalVendido)}</div>
             </CardContent>
           </Card>
+
+          <Card className="bg-[#121212] border-white/10 text-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-400">Previsão Comissão</CardTitle>
+              <CheckCircle className="h-4 w-4 text-[#FF6B35]" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-[#FF6B35]">{formatMoney(commissionSummary.totals.previewTotal)}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#121212] border-white/10 text-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-400">Elegível (Entregues)</CardTitle>
+              <CheckCircle className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-500">
+                {formatMoney(commissionSummary.totals.deliveredEligibleTotal)}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-[#121212] px-4 py-3 text-xs text-gray-400">
+          <p>
+            Previsão de comissão baseada na política comercial. Pagamento real depende de faturamento e recebimento (Cláusulas 3 e 12).
+            Pipeline atual: <strong className="text-gray-200">{formatMoney(commissionSummary.totals.pipelineTotal)}</strong>.
+          </p>
+          {(commissionSummary.warnings.zeroRateCount > 0 || commissionSummary.warnings.inferredTableCount > 0) && (
+            <p className="mt-1 text-amber-300">
+              Atenção: {commissionSummary.warnings.zeroRateCount} pedidos sem taxa configurada e {commissionSummary.warnings.inferredTableCount} com tabela inferida.
+            </p>
+          )}
         </div>
 
         {userRole === 'admin' && (
@@ -1147,6 +1193,7 @@ const VendorDashboard = () => {
                   <th className="px-6 py-4">Cliente</th>
                   <th className="px-6 py-4">Data</th>
                   <th className="px-6 py-4 text-right">Valor Total</th>
+                  <th className="px-6 py-4 text-right">Comissão Prev.</th>
                   <th className="px-6 py-4 text-center">Status</th>
                   <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
@@ -1157,6 +1204,8 @@ const VendorDashboard = () => {
                   filteredOrders.map((order) => {
                     const statusUpper = normalizeStatus(order.status);
                     const isBusy = processingId === order.id;
+                    const commissionRow = commissionByOrderId.get(String(order.id));
+                    const tableLabel = commissionRow?.table || 'TB?';
 
                     return (
                       <tr key={order.id} className="hover:bg-white/5 transition-colors">
@@ -1169,6 +1218,13 @@ const VendorDashboard = () => {
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-[#FF6B35]">
                           {formatMoney(order.total_value)}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="font-bold text-[#FF6B35]">{formatMoney(commissionRow?.previewCommission || 0)}</div>
+                          <div className="text-[10px] text-gray-500">
+                            {tableLabel}
+                            {commissionRow?.tableSource === 'inferred' ? ' (inferida)' : ''}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-center">{getStatusBadge(order.status)}</td>
                         <td className="px-6 py-4">
@@ -1319,7 +1375,7 @@ const VendorDashboard = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                       {loading ? 'Carregando pedidos...' : 'Nenhum pedido encontrado com os filtros selecionados.'}
                     </td>
                   </tr>
