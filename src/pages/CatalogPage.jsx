@@ -367,37 +367,37 @@ const CatalogPage = () => {
     setVisibleCount(ITEMS_STEP);
   }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
 
-useEffect(() => {
+  useEffect(() => {
     const el = loadMoreRef.current;
     if (!el) return;
   
-    // se já está mostrando tudo, não observa
-    if (visibleCount >= filteredAndSortedProducts.length) return;
+    const hasMore = visibleCount < filteredAndSortedProducts.length;
+    if (!hasMore) return;
   
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
         if (!first?.isIntersecting) return;
   
-        // evita disparos repetidos
-        if (isLoadingMore) return;
+        // trava para não disparar várias vezes enquanto está visível
+        observer.unobserve(el);
   
         setIsLoadingMore(true);
   
-        setTimeout(() => {
-          setVisibleCount((prev) =>
-            Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
-          );
-          setIsLoadingMore(false);
-        }, 150);
+        // aumenta a quantidade visível
+        setVisibleCount((prev) =>
+          Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+        );
+  
+        // só para o spinner (opcional)
+        setTimeout(() => setIsLoadingMore(false), 150);
       },
       { root: null, rootMargin: "600px", threshold: 0 }
     );
   
     observer.observe(el);
-  
     return () => observer.disconnect();
-  }, [filteredAndSortedProducts.length, visibleCount, isLoadingMore]);
+  }, [visibleCount, filteredAndSortedProducts.length]);
   
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200">
@@ -630,17 +630,14 @@ useEffect(() => {
                 </div>
             
                 {visibleCount < filteredAndSortedProducts.length && (
-                  <div ref={loadMoreRef} className="flex justify-center items-center py-8 text-gray-500">
-                    {isLoadingMore ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
-                        <span>Carregando mais...</span>
-                      </div>
-                    ) : (
-                      <span>Role para carregar mais</span>
-                    )}
-                  </div>
-                )}
+                <div ref={loadMoreRef} className="flex justify-center items-center py-8">
+                  {isLoadingMore ? (
+                    <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
+                  ) : (
+                    <span className="sr-only">Carregar mais</span>
+                  )}
+                </div>
+              )}
               </>
             )}
 
