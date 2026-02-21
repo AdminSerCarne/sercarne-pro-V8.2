@@ -303,7 +303,6 @@ const CartItemControls = ({
             <Plus className="w-3 h-3" />
           </button>
         </div>
-      </div>
 
       {/* ✅ Só faz sentido alertar "estoque insuficiente" se tiver data */}
       {isOverLimit && (
