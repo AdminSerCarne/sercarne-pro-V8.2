@@ -33,7 +33,6 @@ const CartItemControls = ({
       .replace('R$', '')
       .replace(/[^\d.,-]/g, '');
   
-    // remove milhares e troca vírgula por ponto
     const normalized = s.replace(/\./g, '').replace(',', '.');
     const n = Number(normalized);
     return Number.isFinite(n) ? n : 0;
@@ -45,9 +44,10 @@ const CartItemControls = ({
     if (!w || w <= 0 || !v) return 0;
     return v / w;
   }, [metrics.formattedWeight, metrics.formattedValue]);
-
-const formatMoneyBR = (n) =>
+  
+  const formatMoneyBR = (n) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
+  
   const [updating, setUpdating] = useState(false);
   const [checkingAlternative, setCheckingAlternative] = useState(false);
   const { toast } = useToast();
