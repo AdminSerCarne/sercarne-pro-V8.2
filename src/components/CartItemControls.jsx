@@ -26,6 +26,28 @@ const CartItemControls = ({
   const { processedItems } = useMemo(() => calculateOrderMetrics([item]), [item]);
   const metrics = processedItems?.[0] || {};
 
+  const parseBRNumber = (val) => {
+    if (val === null || val === undefined) return 0;
+    const s = String(val)
+      .replace(/\s/g, '')
+      .replace('R$', '')
+      .replace(/[^\d.,-]/g, '');
+  
+    // remove milhares e troca vírgula por ponto
+    const normalized = s.replace(/\./g, '').replace(',', '.');
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : 0;
+  };
+  
+  const pricePerKg = useMemo(() => {
+    const w = parseBRNumber(metrics.formattedWeight);
+    const v = parseBRNumber(metrics.formattedValue);
+    if (!w || w <= 0 || !v) return 0;
+    return v / w;
+  }, [metrics.formattedWeight, metrics.formattedValue]);
+
+const formatMoneyBR = (n) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
   const [updating, setUpdating] = useState(false);
   const [checkingAlternative, setCheckingAlternative] = useState(false);
   const { toast } = useToast();
@@ -233,8 +255,8 @@ const CartItemControls = ({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-2 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-        <div className="flex flex-col gap-1 text-xs text-gray-500 min-w-[120px]">
+      <div className="flex items-center gap-4 text-xs text-gray-500 min-w-[180px]">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1" title="Peso Total Estimado">
             <Scale size={10} />
             <span className="font-medium text-gray-700">{metrics.formattedWeight || '--'} kg</span>
@@ -243,6 +265,14 @@ const CartItemControls = ({
             <span className="font-medium text-gray-700">{metrics.formattedValue || '--'}</span>
           </div>
         </div>
+      
+        <div className="flex flex-col items-center justify-center">
+          <span className="text-[10px] text-gray-400 font-semibold uppercase">Preço/kg</span>
+          <span className="font-semibold text-gray-800">
+            {pricePerKg > 0 ? `${formatMoneyBR(pricePerKg)}/kg` : '--'}
+          </span>
+        </div>
+      </div>
 
         <div className="flex items-center bg-white rounded-md border border-gray-200 h-8 shadow-sm">
           <button
