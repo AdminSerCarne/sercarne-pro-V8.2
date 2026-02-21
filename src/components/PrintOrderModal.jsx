@@ -55,7 +55,9 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
       </html>
     `);
     doc.close();
-  
+    await new Promise((resolve) => {
+      iframe.onload = () => resolve();
+    });
     // Aguarda CSS + fontes + imagens carregarem antes de imprimir
     const win = iframe.contentWindow;
     if (!win) {
@@ -89,8 +91,6 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
       }
     };
     
-    // dá tempo para os <link rel="stylesheet"> aplicarem layout
-    await new Promise((r) => setTimeout(r, 150));
     await waitForFonts();
     await waitForImages();
     
