@@ -1,3 +1,92 @@
+const TAB_KEYS = Object.freeze(['TAB0', 'TAB1', 'TAB2', 'TAB3', 'TAB4', 'TAB5']);
+
+const TAB_TOKEN_MAP = Object.freeze({
+  '0': 'TAB0',
+  '1': 'TAB1',
+  '2': 'TAB2',
+  '3': 'TAB3',
+  '4': 'TAB4',
+  '5': 'TAB5',
+  TAB0: 'TAB0',
+  TAB1: 'TAB1',
+  TAB2: 'TAB2',
+  TAB3: 'TAB3',
+  TAB4: 'TAB4',
+  TAB5: 'TAB5',
+});
+
+const unique = (arr) => Array.from(new Set(arr.filter(Boolean)));
+
+const resolveTabRRaw = (user) => {
+  if (!user || typeof user !== 'object') return '';
+  const candidates = [
+    user['TabR$'],
+    user['tabr$'],
+    user.TabR,
+    user.tabr,
+    user.tab_r,
+    user.tab_rs,
+    user.tabelas_permitidas,
+    user.allowed_tabs,
+  ];
+  const found = candidates.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+  return found == null ? '' : String(found);
+};
+
+const parseAllowedTabs = (user) => {
+  const raw = resolveTabRRaw(user);
+  if (!raw) return [];
+  const matches = raw.toUpperCase().match(/TAB\s*[0-5]|[0-5]/g) || [];
+  return unique(
+    matches.map((token) => {
+      const normalized = String(token || '').replace(/\s+/g, '').toUpperCase();
+      return TAB_TOKEN_MAP[normalized] || '';
+    })
+  );
+};
+
+const getPriceForTab = (tabelasDisponiveis, tabName) => {
+  const value = Number(tabelasDisponiveis?.[tabName]);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+
+const pickFirstTabWithPrice = (tabNames, tabelasDisponiveis) => {
+  const safeTabs = unique(tabNames);
+  for (const tabName of safeTabs) {
+    const price = getPriceForTab(tabelasDisponiveis, tabName);
+    if (price > 0) return { tabName, price };
+  }
+  return null;
+};
+
+const pickLowestPriceTab = (tabNames, tabelasDisponiveis) => {
+  const safeTabs = unique(tabNames);
+  let best = null;
+  for (const tabName of safeTabs) {
+    const price = getPriceForTab(tabelasDisponiveis, tabName);
+    if (price <= 0) continue;
+    if (!best || price < best.price) {
+      best = { tabName, price };
+    }
+  }
+  return best;
+};
+
+const resolveVolumePreferredTab = (qtdUNDTotalCarrinho) => {
+  const qtd = Number(qtdUNDTotalCarrinho || 0);
+  if (qtd === 1) return 'TAB1';
+  if (qtd >= 2 && qtd <= 9) return 'TAB0';
+  if (qtd >= 10) return 'TAB4';
+  return 'TAB3';
+};
+
+const resolveIsAdminLiberado = (user, userLevel) => {
+  const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
+  const isAdminRole = roleRaw.includes('admin');
+  const isAdminLevel = Number.isFinite(userLevel) && userLevel >= 10;
+  return isAdminRole || isAdminLevel;
+};
+
 export const schlosserRules = {
   _formatMoney: (val) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val),
@@ -44,7 +133,6 @@ export const schlosserRules = {
    */
   getTabelaAplicada: (qtdUNDTotalCarrinho, user, tabelasDisponiveis) => {
     const publicPrice = Number(tabelasDisponiveis?.TAB3) || 0;
-    const transferPrice = Number(tabelasDisponiveis?.TAB2) || 0;
     const floorTab5 = Number(tabelasDisponiveis?.TAB5) || 0;
     const userLevel = Number(
       user?.Nivel ??
@@ -52,6 +140,10 @@ export const schlosserRules = {
       user?.nivel_usuario ??
       user?.nivelUsuario
     );
+    const allowedTabs = parseAllowedTabs(user);
+    const volumePreferredTab = resolveVolumePreferredTab(qtdUNDTotalCarrinho);
+    const isLevel3 = Number.isFinite(userLevel) && userLevel === 3;
+    const isAdminLiberado = resolveIsAdminLiberado(user, userLevel);
 
     const applyFloor = (value) => {
       const n = Number(value) || 0;
@@ -65,30 +157,45 @@ export const schlosserRules = {
       return { price, tabName: price === floorTab5 && floorTab5 > 0 ? 'TAB5' : 'TAB3' };
     }
 
-    let price = publicPrice;
-    let tabName = 'TAB3';
+    // Admin liberado: usa menor preço válido entre todas as tabelas e ignora piso TAB5
+    if (isAdminLiberado) {
+      const bestAdminPrice = pickLowestPriceTab(TAB_KEYS, tabelasDisponiveis);
+      if (bestAdminPrice) {
+        return { price: bestAdminPrice.price, tabName: bestAdminPrice.tabName };
+      }
+      return { price: 0, tabName: 'TAB3' };
+    }
 
-    // Regra especial: nível 3 usa TAB2 (transferência) direto ao logar
-    if (Number.isFinite(userLevel) && userLevel === 3 && transferPrice > 0) {
-      price = transferPrice;
-      tabName = 'TAB2';
-    } else if (qtdUNDTotalCarrinho === 1 && Number(tabelasDisponiveis?.TAB1) > 0) {
-      price = Number(tabelasDisponiveis.TAB1);
-      tabName = 'TAB1';
-    } else if (
-      qtdUNDTotalCarrinho >= 2 &&
-      qtdUNDTotalCarrinho <= 9 &&
-      Number(tabelasDisponiveis?.TAB0) > 0
-    ) {
-      price = Number(tabelasDisponiveis.TAB0);
-      tabName = 'TAB0';
-    } else if (qtdUNDTotalCarrinho >= 10 && Number(tabelasDisponiveis?.TAB4) > 0) {
-      price = Number(tabelasDisponiveis.TAB4);
-      tabName = 'TAB4';
+    // TabR$ define as tabelas permitidas para o usuário.
+    // Se vazio, mantém fallback legado por volume.
+    const preferredTabs = allowedTabs.length > 0
+      ? unique([
+          isLevel3 && allowedTabs.includes('TAB2') ? 'TAB2' : volumePreferredTab,
+          ...allowedTabs,
+          'TAB3',
+          'TAB5',
+        ])
+      : unique([
+          isLevel3 ? 'TAB2' : volumePreferredTab,
+          'TAB1',
+          'TAB0',
+          'TAB4',
+          'TAB2',
+          'TAB3',
+          'TAB5',
+        ]);
+
+    const selected = pickFirstTabWithPrice(preferredTabs, tabelasDisponiveis);
+    if (!selected) {
+      const fallback = applyFloor(publicPrice);
+      return {
+        price: fallback,
+        tabName: fallback === floorTab5 && floorTab5 > 0 ? 'TAB5' : 'TAB3',
+      };
     }
 
     // Piso absoluto: nunca vender abaixo da TAB5
-    const flooredPrice = applyFloor(price);
+    const flooredPrice = applyFloor(selected.price);
     if (!flooredPrice || flooredPrice <= 0) {
       const fallback = applyFloor(publicPrice);
       return { price: fallback, tabName: fallback === floorTab5 && floorTab5 > 0 ? 'TAB5' : 'TAB3' };
@@ -96,7 +203,7 @@ export const schlosserRules = {
 
     return {
       price: flooredPrice,
-      tabName: flooredPrice === floorTab5 && floorTab5 > 0 ? 'TAB5' : tabName,
+      tabName: flooredPrice === floorTab5 && floorTab5 > 0 ? 'TAB5' : selected.tabName,
     };
   },
 
