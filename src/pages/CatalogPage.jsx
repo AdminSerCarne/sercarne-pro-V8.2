@@ -20,6 +20,8 @@ import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 // ✅ FONTE OFICIAL (manual): schlosserApi GVIZ
 import { schlosserApi } from '@/services/schlosserApi';
 
+const [initialStockReady, setInitialStockReady] = useState(false);
+
 const normalizeTextUpper = (value) => String(value ?? '').trim().toUpperCase();
 
 const getBrandLabel = (product) => {
@@ -99,6 +101,7 @@ const CatalogPage = () => {
   const refreshProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setInitialStockReady(false);
     try {
       const list = await schlosserApi.getProducts(role);
       const visible = (Array.isArray(list) ? list : []).filter((p) => p?.visivel === true);
@@ -237,6 +240,7 @@ const CatalogPage = () => {
         setStockMapToday({});
       } finally {
         setLoadingSortStock(false);
+        setInitialStockReady(true);
       }
     };
 
@@ -562,7 +566,7 @@ const CatalogPage = () => {
                   Tentar Novamente
                 </Button>
               </div>
-            ) : loading ? (
+            ) : (loading || (sortMode.startsWith('stock') && !initialStockReady)) ? (
               <div className="flex flex-col justify-center items-center h-64 text-gray-500">
                 <Loader2 className="w-10 h-10 text-[#FF6B35] animate-spin mb-4" />
                 <p>Carregando catálogo...</p>
