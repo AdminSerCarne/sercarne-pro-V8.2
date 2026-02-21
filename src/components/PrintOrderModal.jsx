@@ -108,7 +108,7 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[210mm] w-full p-0 gap-0 bg-white text-black overflow-hidden h-[90vh] flex flex-col sm:rounded-lg">
+      <DialogContent className="print-modal-content max-w-[210mm] w-full p-0 gap-0 bg-white text-black overflow-hidden h-[90vh] flex flex-col sm:rounded-lg">
         {/* Modal Header - Hide on print */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 print:hidden">
             <h2 className="font-bold text-lg text-gray-800 flex items-center gap-2">
@@ -141,6 +141,10 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
         
         {/* CSS for printing */}
         <style>{`
+          .print-modal-content button[data-radix-dialog-close],
+          .print-modal-content [data-radix-dialog-close] {
+            display: none !important;
+          }
           @media print {
             @page {
               size: A4;
