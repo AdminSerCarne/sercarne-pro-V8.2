@@ -31,40 +31,63 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
 
         {/* Content Area - Scrollable */}
         <div className="flex-1 overflow-auto bg-gray-100 p-4 md:p-8 print:p-0 print:overflow-visible">
-             <div className="bg-white shadow-lg mx-auto print:shadow-none print:m-0">
-                 <PrintOrder order={order} />
-             </div>
+             <div id="print-area" className="bg-white shadow-lg mx-auto print:shadow-none print:m-0">
+              <PrintOrder order={order} />
+            </div>
         </div>
         
         {/* CSS for printing */}
         <style>{`
           @media print {
-            body * {
-              visibility: hidden;
-            }
-            .print\\:hidden {
-                display: none !important;
-            }
-            /* Target the modal content specifically */
-            [role="dialog"] {
-              visibility: visible;
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              height: 100%;
+            @page {
+              size: A4;
               margin: 0;
-              padding: 0;
-              background: white;
             }
-            [role="dialog"] * {
-              visibility: visible;
+        
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #fff !important;
+              height: auto !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
-            /* Hide the scrollbar logic and backgrounds during print */
+        
+            /* Esconde tudo e mostra apenas a área de impressão */
+            body * {
+              visibility: hidden !important;
+            }
+            #print-area, #print-area * {
+              visibility: visible !important;
+            }
+        
+            /* Neutraliza Radix/Shadcn Dialog (fixed + transform) durante impressão */
+            [data-radix-portal],
+            [role="dialog"] {
+              position: static !important;
+              inset: auto !important;
+              transform: none !important;
+              width: auto !important;
+              height: auto !important;
+              max-width: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #fff !important;
+            }
+        
+            /* Garante que nada fique “travado” em 90vh/overflow */
             .overflow-auto {
-                overflow: visible !important;
-                background: white !important;
-                padding: 0 !important;
+              overflow: visible !important;
+            }
+        
+            /* Opcional: remove sombras que podem “quebrar” layout no print */
+            .shadow-lg {
+              box-shadow: none !important;
+            }
+        
+            /* Header do modal não imprime */
+            .print\\:hidden {
+              display: none !important;
             }
           }
         `}</style>
