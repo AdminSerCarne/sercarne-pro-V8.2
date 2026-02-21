@@ -91,6 +91,7 @@ const CatalogPage = () => {
   const [visibleCount, setVisibleCount] = useState(ITEMS_STEP);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef(null);
+  const loadingMoreGuardRef = useRef(false);
 
   // papel para schlosserApi (publico vs vendedor)
   const role = user ? 'vendedor' : 'publico';
@@ -367,6 +368,24 @@ const CatalogPage = () => {
     setVisibleCount(ITEMS_STEP);
   }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
 
+  // encontra automaticamente o "scroll container" (se existir)
+const getScrollParent = (node) => {
+  if (!node) return null;
+
+  let parent = node.parentElement;
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    const overflowY = style.overflowY;
+
+    const isScrollable = (overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight;
+    if (isScrollable) return parent;
+
+    parent = parent.parentElement;
+  }
+
+  return null; // se não achar, usa viewport (root null)
+};
+
   useEffect(() => {
     const el = loadMoreRef.current;
     if (!el) return;
@@ -374,25 +393,33 @@ const CatalogPage = () => {
     const hasMore = visibleCount < filteredAndSortedProducts.length;
     if (!hasMore) return;
   
+    const rootEl = getScrollParent(el);
+  
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
         if (!first?.isIntersecting) return;
   
-        // trava para não disparar várias vezes enquanto está visível
-        observer.unobserve(el);
+        // evita disparar várias vezes enquanto está na tela
+        if (loadingMoreGuardRef.current) return;
+        loadingMoreGuardRef.current = true;
   
         setIsLoadingMore(true);
   
-        // aumenta a quantidade visível
         setVisibleCount((prev) =>
           Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
         );
   
-        // só para o spinner (opcional)
-        setTimeout(() => setIsLoadingMore(false), 150);
+        setTimeout(() => {
+          setIsLoadingMore(false);
+          loadingMoreGuardRef.current = false;
+        }, 150);
       },
-      { root: null, rootMargin: "600px", threshold: 0 }
+      {
+        root: rootEl || null,
+        rootMargin: "600px",
+        threshold: 0,
+      }
     );
   
     observer.observe(el);
