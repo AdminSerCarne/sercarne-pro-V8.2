@@ -243,6 +243,27 @@ const CatalogPage = () => {
     run();
   }, [products, stockUpdateTrigger, stockTick]);
 
+  const brandMeta = useMemo(() => {
+    const map = new Map();
+  
+    (products || []).forEach((p) => {
+      const name = String(p?.brandName ?? p?.marca ?? '').trim();
+      if (!name) return;
+  
+      const logo = String(p?.brandImage ?? '').trim();
+  
+      // pega a primeira logo válida que aparecer para a marca
+      if (!map.has(name)) {
+        map.set(name, { name, logo: logo || '' });
+      } else if (logo && !map.get(name).logo) {
+        map.set(name, { name, logo });
+      }
+    });
+  
+    return map;
+  }, [products]);
+
+  
   const brandOptions = useMemo(() => {
     const set = new Set();
     (products || []).forEach((product) => set.add(getBrandLabel(product)));
@@ -423,15 +444,53 @@ const CatalogPage = () => {
                   <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
                     [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
                     [&>svg]:shrink-0">
-                    <SelectValue placeholder="Marca" />
+                    {(() => {
+                      if (brandFilter === 'all') {
+                        return <span className="truncate text-left">Marca: todas</span>;
+                      }
+                    
+                      const meta = brandMeta.get(brandFilter);
+                      const logo = meta?.logo;
+                    
+                      return (
+                        <span className="flex items-center gap-2 min-w-0 text-left">
+                          {logo ? (
+                            <img
+                              src={logo}
+                              alt={brandFilter}
+                              className="h-5 w-5 rounded-sm object-contain bg-white/5"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : null}
+                          <span className="truncate">{brandFilter}</span>
+                        </span>
+                      );
+                    })()}
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="all">Marca: todas</SelectItem>
-                    {brandOptions.map((brand) => (
-                      <SelectItem key={brand} value={brand}>
-                        {brand}
-                      </SelectItem>
-                    ))}
+                    {brandOptions.map((brand) => {
+                      const meta = brandMeta.get(brand);
+                      const logo = meta?.logo;
+                    
+                      return (
+                        <SelectItem key={brand} value={brand}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            {logo ? (
+                              <img
+                                src={logo}
+                                alt={brand}
+                                className="h-5 w-5 rounded-sm object-contain bg-white/5"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : null}
+                            <span className="truncate">{brand}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
 
