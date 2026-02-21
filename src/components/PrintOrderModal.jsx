@@ -56,37 +56,24 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
               display: none !important;
             }
             
-            /* O portal do Radix precisa existir no print */
             [data-radix-portal] {
               display: block !important;
             }
-            
-            /* Dentro do portal, esconda tudo, menos o print-area */
-            [data-radix-portal] * {
+
+            [data-radix-dialog-overlay] {
               display: none !important;
-            }
-            
-            #print-area,
-            #print-area * {
-              display: block !important;
-            }
-            #print-area {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
-              margin: 0 !important;
             }
         
             /* Neutraliza Radix/Shadcn Dialog (fixed + transform) durante impressão */
-            [data-radix-portal],
             [role="dialog"] {
+              display: block !important;
               position: static !important;
               inset: auto !important;
               transform: none !important;
               width: auto !important;
               height: auto !important;
-              max-width: none !important;
+              max-height: none !important;
+              overflow: visible !important;
               margin: 0 !important;
               padding: 0 !important;
               background: #fff !important;
@@ -105,6 +92,14 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
             /* Header do modal não imprime */
             .print\\:hidden {
               display: none !important;
+            }
+
+            .bg-gray-100 {
+              background: #fff !important;
+            }
+            
+            .p-4, .md\:p-8 {
+              padding: 0 !important;
             }
           }
         `}</style>
