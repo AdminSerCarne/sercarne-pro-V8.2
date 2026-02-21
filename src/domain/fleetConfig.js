@@ -2,6 +2,8 @@ export const ROUTE_TARGET_CAPACITY_KG = 5000;
 export const EXTRA_TRUCK_CLIENT_THRESHOLD_KG = 2500;
 
 export const FLEET_STORAGE_KEY = 'schlosser_fleet_v1';
+export const FLEET_ROUTE_PLAN_STORAGE_KEY = 'schlosser_fleet_route_plan_v1';
+export const DELIVERY_TEAM_STORAGE_KEY = 'schlosser_delivery_team_v1';
 
 export const DEFAULT_FLEET = Object.freeze([
   {
@@ -45,6 +47,8 @@ export const DEFAULT_FLEET = Object.freeze([
     ativo: true,
   },
 ]);
+
+export const DEFAULT_DELIVERY_TEAM = Object.freeze([]);
 
 const safeNumber = (value, fallback = 0) => {
   const parsed = Number(value);

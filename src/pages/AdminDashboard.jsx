@@ -1,15 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
+  MessageCircle,
+  Phone,
   RefreshCw,
   Save,
+  Trash2,
   Truck,
   Trophy,
   Undo2,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 
 import { supabase } from '@/lib/customSupabaseClient';
@@ -25,8 +31,11 @@ import { useToast } from '@/components/ui/use-toast';
 
 import {
   DEFAULT_FLEET,
+  DEFAULT_DELIVERY_TEAM,
+  DELIVERY_TEAM_STORAGE_KEY,
   EXTRA_TRUCK_CLIENT_THRESHOLD_KG,
   FLEET_STORAGE_KEY,
+  FLEET_ROUTE_PLAN_STORAGE_KEY,
   ROUTE_TARGET_CAPACITY_KG,
   normalizeFleet,
 } from '@/domain/fleetConfig';
@@ -41,6 +50,8 @@ const formatWeight = (value) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+
+const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
 
 const formatDateLabel = (dayKey) => {
   if (!dayKey || dayKey === 'SEM-DATA') return 'Sem data';
@@ -63,6 +74,91 @@ const loadFleetFromStorage = () => {
   }
 };
 
+const normalizeRole = (role) => {
+  const raw = String(role || '').trim().toUpperCase();
+  if (raw === 'AUXILIAR') return 'AUXILIAR';
+  return 'MOTORISTA';
+};
+
+const normalizeTeamMember = (member) => {
+  if (!member || typeof member !== 'object') return null;
+  const id = String(member.id || '').trim();
+  const nome = String(member.nome || '').trim();
+  if (!id || !nome) return null;
+
+  return {
+    id,
+    nome,
+    telefone: String(member.telefone || '').trim(),
+    funcao: normalizeRole(member.funcao),
+    ativo: member.ativo !== false,
+  };
+};
+
+const normalizeTeam = (teamLike) => {
+  if (!Array.isArray(teamLike) || teamLike.length === 0) {
+    return [...DEFAULT_DELIVERY_TEAM];
+  }
+  return teamLike.map(normalizeTeamMember).filter(Boolean);
+};
+
+const loadTeamFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(DELIVERY_TEAM_STORAGE_KEY);
+    if (!raw) return normalizeTeam(DEFAULT_DELIVERY_TEAM);
+    const parsed = JSON.parse(raw);
+    return normalizeTeam(parsed);
+  } catch {
+    return normalizeTeam(DEFAULT_DELIVERY_TEAM);
+  }
+};
+
+const loadRoutePlanFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(FLEET_ROUTE_PLAN_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+};
+
+const isValidPlanValue = (value) => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  return true;
+};
+
+const sanitizePlanEntry = (entry) => {
+  const source = entry && typeof entry === 'object' ? entry : {};
+  const next = {};
+  Object.entries(source).forEach(([key, value]) => {
+    if (!isValidPlanValue(value)) return;
+    next[key] = value;
+  });
+  return next;
+};
+
+const routePlanKey = (dayKey, routeKey) => `${dayKey}::${routeKey}`;
+
+const formatDateForMessage = (dayKey) => {
+  if (!dayKey || dayKey === 'SEM-DATA') return 'Sem data';
+  try {
+    return format(parseISO(dayKey), 'dd/MM/yyyy');
+  } catch {
+    return dayKey;
+  }
+};
+
+const tomorrowKey = () => format(addDays(new Date(), 1), 'yyyy-MM-dd');
+
+const TEAM_ROLE_OPTIONS = Object.freeze([
+  { value: 'MOTORISTA', label: 'Motorista' },
+  { value: 'AUXILIAR', label: 'Auxiliar' },
+]);
+
 const CAPACITY_BAR_STRIPE = {
   backgroundImage:
     'repeating-linear-gradient(120deg, rgba(255,255,255,0.2), rgba(255,255,255,0.2) 6px, rgba(255,255,255,0.05) 6px, rgba(255,255,255,0.05) 12px)',
@@ -77,8 +173,17 @@ const AdminDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const [fleet, setFleet] = useState(() => loadFleetFromStorage());
+  const [routePlanMap, setRoutePlanMap] = useState(() => loadRoutePlanFromStorage());
+  const [deliveryTeam, setDeliveryTeam] = useState(() => loadTeamFromStorage());
   const [selectedDayKey, setSelectedDayKey] = useState('all');
   const [savingFleet, setSavingFleet] = useState(false);
+  const [savingRoutePlan, setSavingRoutePlan] = useState(false);
+  const [savingTeam, setSavingTeam] = useState(false);
+  const [newTeamMember, setNewTeamMember] = useState({
+    nome: '',
+    telefone: '',
+    funcao: 'MOTORISTA',
+  });
 
   const [overloadSuggestions, setOverloadSuggestions] = useState({});
 
@@ -87,7 +192,7 @@ const AdminDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('pedidos')
-        .select('id, delivery_date, route_name, total_weight, total_value, items, status, client_name, client_id, created_at')
+        .select('id, delivery_date, route_name, delivery_city, total_weight, total_value, items, status, client_name, client_id, created_at')
         .order('delivery_date', { ascending: true })
         .order('created_at', { ascending: false });
 
@@ -125,23 +230,97 @@ const AdminDashboard = () => {
 
   const overview = useMemo(() => buildFleetDashboardData(orders, fleet), [orders, fleet]);
 
+  const fleetMap = useMemo(() => {
+    const map = new Map();
+    fleet.forEach((vehicle) => {
+      map.set(vehicle.id, vehicle);
+    });
+    return map;
+  }, [fleet]);
+
+  const teamMap = useMemo(() => {
+    const map = new Map();
+    deliveryTeam.forEach((member) => {
+      map.set(member.id, member);
+    });
+    return map;
+  }, [deliveryTeam]);
+
+  const activeDrivers = useMemo(
+    () => deliveryTeam.filter((member) => member.ativo && member.funcao === 'MOTORISTA'),
+    [deliveryTeam]
+  );
+  const activeHelpers = useMemo(
+    () => deliveryTeam.filter((member) => member.ativo && member.funcao === 'AUXILIAR'),
+    [deliveryTeam]
+  );
+  const allDrivers = useMemo(
+    () => deliveryTeam.filter((member) => member.funcao === 'MOTORISTA'),
+    [deliveryTeam]
+  );
+  const allHelpers = useMemo(
+    () => deliveryTeam.filter((member) => member.funcao === 'AUXILIAR'),
+    [deliveryTeam]
+  );
+
+  const planningDays = useMemo(() => {
+    return overview.days.map((day) => {
+      const nextRoutes = day.routes.map((route) => {
+        const planKey = routePlanKey(day.dayKey, route.routeKey);
+        const planEntry = sanitizePlanEntry(routePlanMap[planKey]);
+
+        const manualVehicle = planEntry.vehicleId ? fleetMap.get(planEntry.vehicleId) || null : null;
+        const effectiveVehicle = manualVehicle || route.assignedVehicle || null;
+
+        const assignedCapacityKg = Number(effectiveVehicle?.capacidadeKg || 0);
+        const vehiclePercent =
+          assignedCapacityKg > 0 ? (Number(route.totalWeight || 0) / assignedCapacityKg) * 100 : 0;
+
+        const assignedDriver = planEntry.driverId ? teamMap.get(planEntry.driverId) || null : null;
+        const assignedHelpers = [planEntry.helper1Id, planEntry.helper2Id]
+          .filter(Boolean)
+          .map((memberId) => teamMap.get(memberId))
+          .filter(Boolean);
+
+        return {
+          ...route,
+          planKey,
+          suggestedVehicle: route.assignedVehicle || null,
+          assignedVehicle: effectiveVehicle,
+          assignedCapacityKg,
+          vehiclePercent,
+          vehicleSignal: getCapacitySignal(vehiclePercent),
+          isVehicleManual: Boolean(manualVehicle),
+          planEntry,
+          assignedDriver,
+          assignedHelpers,
+        };
+      });
+
+      return {
+        ...day,
+        routes: nextRoutes,
+      };
+    });
+  }, [overview.days, routePlanMap, fleetMap, teamMap]);
+
   const dayOptions = useMemo(() => {
-    return overview.days.map((day) => ({
+    return planningDays.map((day) => ({
       key: day.dayKey,
       label: `${formatDateLabel(day.dayKey)} - ${formatWeight(day.totalWeight)} kg`,
     }));
-  }, [overview.days]);
+  }, [planningDays]);
 
   const visibleDays = useMemo(() => {
-    if (selectedDayKey === 'all') return overview.days;
-    return overview.days.filter((day) => day.dayKey === selectedDayKey);
-  }, [overview.days, selectedDayKey]);
+    if (selectedDayKey === 'all') return planningDays;
+    return planningDays.filter((day) => day.dayKey === selectedDayKey);
+  }, [planningDays, selectedDayKey]);
 
   useEffect(() => {
-    if (selectedDayKey !== 'all' && !overview.days.some((day) => day.dayKey === selectedDayKey)) {
+    if (selectedDayKey !== 'all' && !planningDays.some((day) => day.dayKey === selectedDayKey)) {
       setSelectedDayKey('all');
     }
-  }, [overview.days, selectedDayKey]);
+  }, [planningDays, selectedDayKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -235,6 +414,236 @@ const AdminDashboard = () => {
       title: 'Frota restaurada',
       description: 'Voltou para os 5 veículos padrão cadastrados.',
     });
+  };
+
+  const updateRoutePlanEntry = (planKey, patch) => {
+    setRoutePlanMap((current) => {
+      const currentEntry = sanitizePlanEntry(current?.[planKey]);
+      const nextEntry = sanitizePlanEntry({ ...currentEntry, ...patch });
+
+      if (Object.keys(nextEntry).length === 0) {
+        const cloned = { ...current };
+        delete cloned[planKey];
+        return cloned;
+      }
+
+      return {
+        ...current,
+        [planKey]: nextEntry,
+      };
+    });
+  };
+
+  const saveRoutePlanning = () => {
+    setSavingRoutePlan(true);
+    try {
+      const sanitized = Object.fromEntries(
+        Object.entries(routePlanMap || {})
+          .map(([key, value]) => [key, sanitizePlanEntry(value)])
+          .filter(([, value]) => Object.keys(value).length > 0)
+      );
+      localStorage.setItem(FLEET_ROUTE_PLAN_STORAGE_KEY, JSON.stringify(sanitized));
+      setRoutePlanMap(sanitized);
+      toast({
+        title: 'Planejamento salvo',
+        description: 'Trocas de veículo e escala de rota foram salvas.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Erro ao salvar planejamento',
+        description: err?.message || 'Não foi possível salvar o planejamento.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingRoutePlan(false);
+    }
+  };
+
+  const clearRoutePlanning = () => {
+    setRoutePlanMap({});
+    localStorage.removeItem(FLEET_ROUTE_PLAN_STORAGE_KEY);
+    toast({
+      title: 'Planejamento limpo',
+      description: 'Voltou para sugestões automáticas de veículo/equipe.',
+    });
+  };
+
+  const handleRouteVehicleSelection = (planKey, value) => {
+    if (value === '__AUTO__') {
+      updateRoutePlanEntry(planKey, { vehicleId: '' });
+      return;
+    }
+    updateRoutePlanEntry(planKey, { vehicleId: value });
+  };
+
+  const handleRouteDriverSelection = (planKey, value) => {
+    if (value === '__NONE__') {
+      updateRoutePlanEntry(planKey, { driverId: '' });
+      return;
+    }
+    updateRoutePlanEntry(planKey, { driverId: value });
+  };
+
+  const handleRouteHelperSelection = (planKey, slot, value) => {
+    const field = slot === 2 ? 'helper2Id' : 'helper1Id';
+    if (value === '__NONE__') {
+      updateRoutePlanEntry(planKey, { [field]: '' });
+      return;
+    }
+
+    setRoutePlanMap((current) => {
+      const currentEntry = sanitizePlanEntry(current?.[planKey]);
+      const nextEntry = {
+        ...currentEntry,
+        [field]: value,
+      };
+
+      if (slot === 1 && nextEntry.helper2Id === value) nextEntry.helper2Id = '';
+      if (slot === 2 && nextEntry.helper1Id === value) nextEntry.helper1Id = '';
+
+      const sanitized = sanitizePlanEntry(nextEntry);
+      if (Object.keys(sanitized).length === 0) {
+        const cloned = { ...current };
+        delete cloned[planKey];
+        return cloned;
+      }
+
+      return {
+        ...current,
+        [planKey]: sanitized,
+      };
+    });
+  };
+
+  const saveDeliveryTeam = () => {
+    setSavingTeam(true);
+    try {
+      const normalized = normalizeTeam(deliveryTeam);
+      localStorage.setItem(DELIVERY_TEAM_STORAGE_KEY, JSON.stringify(normalized));
+      setDeliveryTeam(normalized);
+      toast({
+        title: 'Equipe salva',
+        description: 'Cadastro de motoristas/auxiliares atualizado.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Erro ao salvar equipe',
+        description: err?.message || 'Não foi possível salvar a equipe.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingTeam(false);
+    }
+  };
+
+  const addTeamMember = () => {
+    const nome = String(newTeamMember.nome || '').trim();
+    if (!nome) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'Informe o nome para cadastrar na equipe.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const member = normalizeTeamMember({
+      id: `team-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      nome,
+      telefone: String(newTeamMember.telefone || '').trim(),
+      funcao: normalizeRole(newTeamMember.funcao),
+      ativo: true,
+    });
+
+    if (!member) return;
+
+    setDeliveryTeam((current) => [...current, member]);
+    setNewTeamMember({ nome: '', telefone: '', funcao: 'MOTORISTA' });
+  };
+
+  const updateTeamMemberField = (memberId, field, value) => {
+    setDeliveryTeam((current) =>
+      current.map((member) =>
+        member.id === memberId ? { ...member, [field]: value } : member
+      )
+    );
+  };
+
+  const removeTeamMember = (memberId) => {
+    setDeliveryTeam((current) => current.filter((member) => member.id !== memberId));
+
+    setRoutePlanMap((current) => {
+      const next = {};
+      Object.entries(current || {}).forEach(([key, value]) => {
+        const entry = sanitizePlanEntry(value);
+        if (entry.driverId === memberId) entry.driverId = '';
+        if (entry.helper1Id === memberId) entry.helper1Id = '';
+        if (entry.helper2Id === memberId) entry.helper2Id = '';
+        const cleaned = sanitizePlanEntry(entry);
+        if (Object.keys(cleaned).length > 0) next[key] = cleaned;
+      });
+      return next;
+    });
+  };
+
+  const buildRouteBrief = (day, route) => {
+    const dateLabel = formatDateForMessage(day.dayKey);
+    const isTomorrowRoute = day.dayKey === tomorrowKey();
+    const header = isTomorrowRoute ? 'ESCALA DE ENTREGA (AMANHA)' : 'ESCALA DE ENTREGA';
+    const vehicleName = route.assignedVehicle?.nome || 'Sem veículo definido';
+    const vehicleCapacity = Number(route.assignedCapacityKg || 0);
+    const cities = Array.isArray(route.cities) && route.cities.length > 0
+      ? route.cities.join(', ')
+      : route.routeName;
+    const driverLine = route.assignedDriver
+      ? `${route.assignedDriver.nome}${route.assignedDriver.telefone ? ` (${route.assignedDriver.telefone})` : ''}`
+      : 'Não definido';
+    const helpersLine = route.assignedHelpers.length > 0
+      ? route.assignedHelpers.map((member) => member.nome).join(', ')
+      : 'Não definido';
+
+    return [
+      `◆ ${header}`,
+      `• Data: ${dateLabel}`,
+      `• Rota: ${route.routeName}`,
+      `• Veículo: ${vehicleName}`,
+      `• Capacidade veículo: ${formatWeight(vehicleCapacity)} kg`,
+      `• Carga prevista: ${formatWeight(route.totalWeight)} kg (${Number(route.vehiclePercent || 0).toFixed(1)}%)`,
+      `• Pedidos na rota: ${route.totalOrders}`,
+      `• Cidades previstas: ${cities}`,
+      `• Motorista: ${driverLine}`,
+      `• Auxiliares: ${helpersLine}`,
+      `• Observação: ${route.isVehicleManual ? 'Veículo definido manualmente pelo admin.' : route.assignmentReason}`,
+      `• Plataforma: https://sercarne.com`,
+    ].join('\n');
+  };
+
+  const copyRouteBrief = async (day, route) => {
+    const message = buildRouteBrief(day, route);
+    try {
+      await navigator.clipboard.writeText(message);
+      toast({
+        title: 'Escala copiada',
+        description: `Rota ${route.routeName} copiada para envio.`,
+      });
+    } catch {
+      window.prompt('Copie a escala abaixo:', message);
+    }
+  };
+
+  const sendRouteBriefToDriverWhatsapp = (day, route) => {
+    const phone = onlyDigits(route.assignedDriver?.telefone || '');
+    if (!phone) {
+      toast({
+        title: 'Motorista sem telefone',
+        description: 'Cadastre telefone do motorista para abrir WhatsApp.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const text = encodeURIComponent(buildRouteBrief(day, route));
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -371,6 +780,121 @@ const AdminDashboard = () => {
         </Card>
 
         <Card className="bg-[#121212] border-white/10 text-white">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#FF6B35]" /> Equipe de Entrega
+            </CardTitle>
+            <p className="text-sm text-gray-400">
+              Cadastre motoristas e auxiliares para escala por rota e envio de briefing diário.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <Input
+                value={newTeamMember.nome}
+                onChange={(event) => setNewTeamMember((current) => ({ ...current, nome: event.target.value }))}
+                placeholder="Nome completo"
+                className="bg-[#0a0a0a] border-white/10 text-white md:col-span-2"
+              />
+              <Input
+                value={newTeamMember.telefone}
+                onChange={(event) => setNewTeamMember((current) => ({ ...current, telefone: event.target.value }))}
+                placeholder="Telefone / WhatsApp"
+                className="bg-[#0a0a0a] border-white/10 text-white"
+              />
+              <Select
+                value={newTeamMember.funcao}
+                onValueChange={(value) => setNewTeamMember((current) => ({ ...current, funcao: value }))}
+              >
+                <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#111] border-white/10 text-white">
+                  {TEAM_ROLE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={addTeamMember} className="bg-[#FF6B35] hover:bg-[#e55a2b] text-white">
+                <UserPlus className="h-4 w-4 mr-2" /> Adicionar na equipe
+              </Button>
+              <Button onClick={saveDeliveryTeam} disabled={savingTeam} variant="outline" className="border-white/20 text-gray-200 hover:bg-white/10">
+                <Save className="h-4 w-4 mr-2" /> Salvar equipe
+              </Button>
+              <Badge variant="outline" className="border-white/10 text-gray-300">
+                Ativos: {deliveryTeam.filter((member) => member.ativo).length}
+              </Badge>
+            </div>
+
+            {deliveryTeam.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-gray-500">
+                Nenhum motorista/auxiliar cadastrado ainda.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {deliveryTeam.map((member) => (
+                  <div key={member.id} className="rounded-lg border border-white/10 bg-[#0f0f0f] p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
+                      <Input
+                        value={member.nome}
+                        onChange={(event) => updateTeamMemberField(member.id, 'nome', event.target.value)}
+                        className="bg-[#0a0a0a] border-white/10 text-white md:col-span-4"
+                      />
+                      <Input
+                        value={member.telefone}
+                        onChange={(event) => updateTeamMemberField(member.id, 'telefone', event.target.value)}
+                        className="bg-[#0a0a0a] border-white/10 text-white md:col-span-3"
+                        placeholder="Telefone"
+                      />
+                      <Select
+                        value={member.funcao}
+                        onValueChange={(value) => updateTeamMemberField(member.id, 'funcao', normalizeRole(value))}
+                      >
+                        <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white md:col-span-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#111] border-white/10 text-white">
+                          {TEAM_ROLE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <label className="md:col-span-2 text-sm text-gray-300 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={member.ativo !== false}
+                          onChange={(event) => updateTeamMemberField(member.id, 'ativo', Boolean(event.target.checked))}
+                          className="h-4 w-4 accent-[#FF6B35]"
+                        />
+                        Ativo
+                      </label>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeTeamMember(member.id)}
+                        className="md:col-span-1 text-gray-400 hover:text-red-400 hover:bg-white/10 justify-self-end"
+                        title="Remover"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#121212] border-white/10 text-white">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Planejamento de Carga (Dia &gt; Rota &gt; Veículo)</CardTitle>
             <p className="text-sm text-gray-400">
@@ -380,23 +904,40 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-              <Select value={selectedDayKey} onValueChange={setSelectedDayKey}>
-                <SelectTrigger className="w-full md:w-[360px] bg-[#0a0a0a] border-white/10 text-white">
-                  <SelectValue placeholder="Selecione a data" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#111] border-white/10 text-white">
-                  <SelectItem value="all">Todas as datas</SelectItem>
-                  {dayOptions.map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col md:flex-row gap-2 md:items-center">
+                <Select value={selectedDayKey} onValueChange={setSelectedDayKey}>
+                  <SelectTrigger className="w-full md:w-[360px] bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue placeholder="Selecione a data" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#111] border-white/10 text-white">
+                    <SelectItem value="all">Todas as datas</SelectItem>
+                    {dayOptions.map((option) => (
+                      <SelectItem key={option.key} value={option.key}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Badge variant="outline" className="border-white/10 text-gray-300">
-                Meta por rota: {ROUTE_TARGET_CAPACITY_KG}kg
-              </Badge>
+                <Button onClick={saveRoutePlanning} disabled={savingRoutePlan} className="bg-[#FF6B35] hover:bg-[#e55a2b] text-white">
+                  <Save className="h-4 w-4 mr-2" /> Salvar escala rota
+                </Button>
+                <Button onClick={clearRoutePlanning} variant="outline" className="border-white/20 text-gray-200 hover:bg-white/10">
+                  <Undo2 className="h-4 w-4 mr-2" /> Limpar trocas manuais
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="border-white/10 text-gray-300">
+                  Meta por rota: {ROUTE_TARGET_CAPACITY_KG}kg
+                </Badge>
+                <Badge variant="outline" className="border-white/10 text-gray-300">
+                  Motoristas ativos: {activeDrivers.length}
+                </Badge>
+                <Badge variant="outline" className="border-white/10 text-gray-300">
+                  Auxiliares ativos: {activeHelpers.length}
+                </Badge>
+              </div>
             </div>
 
             {loading ? (
@@ -458,15 +999,136 @@ const AdminDashboard = () => {
                               </div>
                             </div>
 
-                            <div className="rounded border border-white/10 bg-black/30 p-2 text-xs text-gray-300 space-y-1">
-                              <p>
-                                Veículo sugerido: <strong className="text-white">{route.assignedVehicle?.nome || 'Sem veículo disponível'}</strong>
-                              </p>
+                            <div className="rounded border border-white/10 bg-black/30 p-2 text-xs text-gray-300 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p>
+                                  Veículo em uso:{' '}
+                                  <strong className="text-white">
+                                    {route.assignedVehicle?.nome || 'Sem veículo disponível'}
+                                  </strong>
+                                </p>
+                                <Badge variant="outline" className={route.isVehicleManual ? 'border-amber-500/50 text-amber-300' : 'border-white/20 text-gray-300'}>
+                                  {route.isVehicleManual ? 'MANUAL' : 'SUGERIDO'}
+                                </Badge>
+                              </div>
+
                               <p>
                                 Capacidade do veículo: <strong className="text-white">{formatWeight(route.assignedCapacityKg)} kg</strong>
                                 {' '}• Ocupação veículo: <span className={vehicleSignal.textClass}>{Number(route.vehiclePercent || 0).toFixed(1)}%</span>
                               </p>
-                              <p className="text-gray-400">{route.assignmentReason}</p>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase text-gray-500 font-semibold">Trocar veículo da rota</label>
+                                  <Select
+                                    value={route.planEntry?.vehicleId || '__AUTO__'}
+                                    onValueChange={(value) => handleRouteVehicleSelection(route.planKey, value)}
+                                  >
+                                    <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-[#111] border-white/10 text-white">
+                                      <SelectItem value="__AUTO__">
+                                        Sugestão automática ({route.suggestedVehicle?.nome || 'sem sugestão'})
+                                      </SelectItem>
+                                      {fleet.map((vehicle) => (
+                                        <SelectItem key={vehicle.id} value={vehicle.id}>
+                                          {vehicle.nome} ({formatWeight(vehicle.capacidadeKg)}kg){vehicle.ativo ? '' : ' [INATIVO]'}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase text-gray-500 font-semibold">Motorista</label>
+                                  <Select
+                                    value={route.planEntry?.driverId || '__NONE__'}
+                                    onValueChange={(value) => handleRouteDriverSelection(route.planKey, value)}
+                                  >
+                                    <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-[#111] border-white/10 text-white">
+                                      <SelectItem value="__NONE__">Sem motorista definido</SelectItem>
+                                      {allDrivers.map((member) => (
+                                        <SelectItem key={member.id} value={member.id}>
+                                          {member.nome}{member.ativo ? '' : ' [INATIVO]'}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase text-gray-500 font-semibold">Auxiliar 1</label>
+                                  <Select
+                                    value={route.planEntry?.helper1Id || '__NONE__'}
+                                    onValueChange={(value) => handleRouteHelperSelection(route.planKey, 1, value)}
+                                  >
+                                    <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-[#111] border-white/10 text-white">
+                                      <SelectItem value="__NONE__">Sem auxiliar</SelectItem>
+                                      {allHelpers.map((member) => (
+                                        <SelectItem key={member.id} value={member.id}>
+                                          {member.nome}{member.ativo ? '' : ' [INATIVO]'}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase text-gray-500 font-semibold">Auxiliar 2</label>
+                                  <Select
+                                    value={route.planEntry?.helper2Id || '__NONE__'}
+                                    onValueChange={(value) => handleRouteHelperSelection(route.planKey, 2, value)}
+                                  >
+                                    <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-[#111] border-white/10 text-white">
+                                      <SelectItem value="__NONE__">Sem auxiliar</SelectItem>
+                                      {allHelpers.map((member) => (
+                                        <SelectItem key={member.id} value={member.id}>
+                                          {member.nome}{member.ativo ? '' : ' [INATIVO]'}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+
+                              <p className="text-gray-400">{route.isVehicleManual ? 'Ajuste manual aplicado pelo admin.' : route.assignmentReason}</p>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => copyRouteBrief(day, route)}
+                                  className="h-7 text-[11px] border-white/20 text-gray-200 hover:bg-white/10"
+                                >
+                                  <Copy className="h-3.5 w-3.5 mr-1" /> Copiar escala
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => sendRouteBriefToDriverWhatsapp(day, route)}
+                                  disabled={!route.assignedDriver?.telefone}
+                                  className="h-7 text-[11px] border-green-500/30 text-green-300 hover:bg-green-500/10 disabled:opacity-40"
+                                >
+                                  <MessageCircle className="h-3.5 w-3.5 mr-1" /> WhatsApp motorista
+                                </Button>
+                                {route.assignedDriver?.telefone && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                                    <Phone className="h-3.5 w-3.5" /> {route.assignedDriver.telefone}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {Number(route.targetPercent || 0) >= 90 && Number(route.targetPercent || 0) <= 100 && (
@@ -510,8 +1172,13 @@ const AdminDashboard = () => {
                               </p>
                             )}
 
-                            <div className="text-[11px] text-gray-500">
-                              Top cliente: {route.largestClient?.clientName || '—'} ({formatWeight(route.largestClient?.weightKg || 0)}kg)
+                            <div className="text-[11px] text-gray-500 space-y-1">
+                              <p>
+                                Top cliente: {route.largestClient?.clientName || '—'} ({formatWeight(route.largestClient?.weightKg || 0)}kg)
+                              </p>
+                              <p>
+                                Cidades previstas: {Array.isArray(route.cities) && route.cities.length > 0 ? route.cities.join(', ') : '—'}
+                              </p>
                             </div>
                           </div>
                         );

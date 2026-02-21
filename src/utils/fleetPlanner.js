@@ -35,6 +35,46 @@ const normalizeText = (value) => String(value || '').normalize('NFD').replace(/[
 
 export const normalizeRouteName = (routeName) => normalizeText(routeName || 'SEM ROTA');
 
+const normalizeCityToken = (value) => {
+  const city = String(value || '').trim();
+  if (!city) return '';
+  const normalized = normalizeText(city);
+  if (!normalized) return '';
+  if (normalized === 'SEM ROTA' || normalized === 'SEM CIDADE') return '';
+  return normalized;
+};
+
+const extractCitiesFromRouteName = (routeNameRaw) => {
+  const raw = String(routeNameRaw || '').trim();
+  if (!raw) return [];
+
+  const out = [];
+
+  const parenthesis = raw.match(/\(([^)]+)\)/);
+  if (parenthesis?.[1]) {
+    parenthesis[1]
+      .split(/[;,/|]/g)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => out.push(part));
+  }
+
+  const segments = raw.split(' - ').map((part) => part.trim()).filter(Boolean);
+  if (segments.length >= 2) {
+    const possibleCity = segments[segments.length - 1];
+    const normalizedPossibleCity = normalizeText(possibleCity);
+    if (
+      normalizedPossibleCity &&
+      !normalizedPossibleCity.includes('ROTA') &&
+      normalizedPossibleCity !== normalizeText(raw)
+    ) {
+      out.push(possibleCity);
+    }
+  }
+
+  return Array.from(new Set(out));
+};
+
 export const toISODateKey = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return 'SEM-DATA';
@@ -289,6 +329,7 @@ export const buildFleetDashboardData = (orders, fleetLike = DEFAULT_FLEET) => {
         totalValue: 0,
         totalOrders: 0,
         clientsMap: new Map(),
+        citiesMap: new Map(),
       });
     }
 
@@ -301,6 +342,23 @@ export const buildFleetDashboardData = (orders, fleetLike = DEFAULT_FLEET) => {
     previousClient.weightKg += weight;
     previousClient.orders += 1;
     routeNode.clientsMap.set(clientName, previousClient);
+
+    const cityCandidates = [
+      String(order?.delivery_city || '').trim(),
+      ...extractCitiesFromRouteName(routeNameRaw),
+    ];
+
+    cityCandidates.forEach((city) => {
+      const cityKey = normalizeCityToken(city);
+      if (!cityKey) return;
+
+      const current = routeNode.citiesMap.get(cityKey) || {
+        cityName: String(city || '').trim().toUpperCase(),
+        orders: 0,
+      };
+      current.orders += 1;
+      routeNode.citiesMap.set(cityKey, current);
+    });
   });
 
   const days = Array.from(dayMap.values())
@@ -316,6 +374,10 @@ export const buildFleetDashboardData = (orders, fleetLike = DEFAULT_FLEET) => {
           totalOrders: route.totalOrders,
           clients: Array.from(route.clientsMap.values())
             .sort((a, b) => Number(b.weightKg || 0) - Number(a.weightKg || 0)),
+          cities: Array.from(route.citiesMap.values())
+            .sort((a, b) => Number(b.orders || 0) - Number(a.orders || 0))
+            .map((city) => city.cityName)
+            .filter(Boolean),
         }))
         .sort((a, b) => Number(b.totalWeight || 0) - Number(a.totalWeight || 0));
 
