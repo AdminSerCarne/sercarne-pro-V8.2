@@ -96,6 +96,14 @@ const formatListWithOverflow = (items, limit = 3) => {
   return remaining > 0 ? `${visible.join(', ')} +${remaining}` : visible.join(', ');
 };
 
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
 const VendorDashboard = () => {
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
@@ -342,7 +350,7 @@ const VendorDashboard = () => {
           totalWeight: 0,
           totalValue: 0,
           vendors: new Set(),
-          clients: new Set(),
+          clients: new Map(),
           products: new Map(),
         };
         dayNode.routes.set(routeKey, routeNode);
@@ -356,7 +364,17 @@ const VendorDashboard = () => {
       routeNode.totalWeight += orderWeight;
       routeNode.totalValue += orderValue;
       routeNode.vendors.add(vendorKey);
-      routeNode.clients.add(clientKey);
+
+      const clientNode = routeNode.clients.get(clientKey) || {
+        name: clientKey,
+        orders: 0,
+        weight: 0,
+        value: 0,
+      };
+      clientNode.orders += 1;
+      clientNode.weight += orderWeight;
+      clientNode.value += orderValue;
+      routeNode.clients.set(clientKey, clientNode);
 
       routeSet.add(routeKey);
       vendorSet.add(vendorKey);
@@ -397,7 +415,8 @@ const VendorDashboard = () => {
           )
           .map((route) => {
             const vendorsList = Array.from(route.vendors).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-            const clientsList = Array.from(route.clients).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            const clientsList = Array.from(route.clients.values())
+              .sort((a, b) => b.weight - a.weight || b.orders - a.orders || a.name.localeCompare(b.name, 'pt-BR'));
             const productsList = Array.from(route.products.entries())
               .sort((a, b) => b[1].weight - a[1].weight || b[1].quantity - a[1].quantity)
               .map(([name, stats]) => ({
@@ -409,6 +428,7 @@ const VendorDashboard = () => {
             const productsPreview = productsList
               .slice(0, 6)
               .map((p) => `${p.name} (${p.quantity} und)`);
+            const clientsNameList = clientsList.map((client) => client.name);
 
             return {
               routeKey: route.routeKey,
@@ -419,7 +439,8 @@ const VendorDashboard = () => {
               clientsCount: clientsList.length,
               productsCount: productsList.length,
               vendorsDisplay: formatListWithOverflow(vendorsList, 3),
-              clientsDisplay: formatListWithOverflow(clientsList, 4),
+              clientsDisplay: formatListWithOverflow(clientsNameList, 4),
+              clientsList,
               productsDisplay: formatListWithOverflow(productsPreview, 3),
             };
           }),
@@ -626,6 +647,142 @@ const VendorDashboard = () => {
     setIsDetailsModalOpen(true);
   };
 
+  const handlePrintDayRouteClients = () => {
+    if (userRole !== 'admin') return;
+
+    if (!masterSummary.days.length) {
+      toast({
+        title: 'Sem dados para impressão',
+        description: 'Não há dados no painel master com os filtros atuais.',
+      });
+      return;
+    }
+
+    const generatedAt = format(new Date(), 'dd/MM/yyyy HH:mm');
+
+    const daysHtml = masterSummary.days
+      .map((day) => {
+        const routesHtml = day.routes
+          .map((route) => {
+            const clientsRows = (route.clientsList || [])
+              .map((client) => {
+                return `
+                  <tr>
+                    <td>${escapeHtml(client.name)}</td>
+                    <td class="right">${Number(client.orders || 0)}</td>
+                    <td class="right">${formatWeight(client.weight)} kg</td>
+                    <td class="right">${formatMoney(client.value)}</td>
+                  </tr>
+                `;
+              })
+              .join('');
+
+            return `
+              <section class="route-block">
+                <div class="route-header">
+                  <h4>${escapeHtml(route.routeKey)}</h4>
+                  <div class="route-meta">
+                    ${route.totalOrders} pedidos | ${formatWeight(route.totalWeight)} kg | ${formatMoney(route.totalValue)}
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th class="right">Pedidos</th>
+                      <th class="right">KG</th>
+                      <th class="right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${clientsRows || '<tr><td colspan="4">Sem clientes nesta rota.</td></tr>'}
+                  </tbody>
+                </table>
+              </section>
+            `;
+          })
+          .join('');
+
+        return `
+          <section class="day-block">
+            <div class="day-header">
+              <h3>${escapeHtml(formatDateKey(day.dayKey))}</h3>
+              <div class="day-meta">
+                ${day.totalOrders} pedidos | ${formatWeight(day.totalWeight)} kg | ${formatMoney(day.totalValue)}
+              </div>
+            </div>
+            ${routesHtml}
+          </section>
+        `;
+      })
+      .join('');
+
+    const reportHtml = `
+      <!doctype html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Relatório Dia > Rota > Clientes</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #111; }
+          h1 { margin: 0 0 6px; font-size: 20px; }
+          .subtitle { margin: 0 0 20px; color: #555; font-size: 12px; }
+          .summary { margin-bottom: 14px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; }
+          .day-block { margin-bottom: 18px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+          .day-header { background: #f6f6f6; padding: 10px 12px; border-bottom: 1px solid #ddd; }
+          .day-header h3 { margin: 0 0 4px; font-size: 16px; }
+          .day-meta { font-size: 12px; color: #444; }
+          .route-block { padding: 10px 12px 14px; border-bottom: 1px dashed #ddd; }
+          .route-block:last-child { border-bottom: 0; }
+          .route-header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; align-items: baseline; }
+          .route-header h4 { margin: 0; font-size: 14px; }
+          .route-meta { font-size: 12px; color: #444; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; }
+          th { background: #fafafa; }
+          .right { text-align: right; white-space: nowrap; }
+          @media print {
+            body { margin: 8mm; }
+            .day-block { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Relatório Operacional: Dia > Rota > Clientes</h1>
+        <p class="subtitle">Gerado em ${escapeHtml(generatedAt)} | Status: ${escapeHtml(statusFilter)} | Período: ${escapeHtml(dateFilter)}</p>
+
+        <div class="summary">
+          <strong>Totais:</strong>
+          ${masterSummary.totals.orders} pedidos |
+          ${formatWeight(masterSummary.totals.weight)} kg |
+          ${formatMoney(masterSummary.totals.value)} |
+          ${masterSummary.totals.routes} rotas |
+          ${masterSummary.totals.clients} clientes
+        </div>
+
+        ${daysHtml}
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=1100,height=900');
+    if (!printWindow) {
+      toast({
+        title: 'Pop-up bloqueado',
+        description: 'Libere pop-up no navegador para imprimir o relatório.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(reportHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   // -----------------------------------------
   // Stats
   // -----------------------------------------
@@ -699,9 +856,18 @@ const VendorDashboard = () => {
         {userRole === 'admin' && (
           <Card className="bg-[#121212] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-lg">
-                Painel Master: Dia &gt; Rota &gt; KG Carga &gt; Vendedores &gt; Clientes &gt; Produtos
-              </CardTitle>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <CardTitle className="text-lg">
+                  Painel Master: Dia &gt; Rota &gt; KG Carga &gt; Vendedores &gt; Clientes &gt; Produtos
+                </CardTitle>
+                <Button
+                  onClick={handlePrintDayRouteClients}
+                  className="bg-[#FF6B35] hover:bg-[#e95f2d] text-white"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Imprimir Dia &gt; Rota &gt; Clientes
+                </Button>
+              </div>
               <p className="text-xs text-gray-400">
                 Resumo operacional por data de entrega. Considera somente pedidos não cancelados e respeita os filtros ativos.
               </p>
