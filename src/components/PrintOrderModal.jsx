@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Printer, X } from 'lucide-react';
@@ -6,9 +6,66 @@ import PrintOrder from './PrintOrder';
 
 const PrintOrderModal = ({ isOpen, onClose, order }) => {
   if (!order) return null;
-
+  const printRef = useRef(null);
   const handlePrint = () => {
-    window.print();
+    if (!printRef.current) return;
+  
+    // Cria um iframe “invisível” só para impressão (evita bugs do modal/portal)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+  
+    document.body.appendChild(iframe);
+  
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+  
+    // Copia todos os <link> e <style> do HEAD (para manter Tailwind/estilos)
+    const headHtml = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
+      .map((el) => el.outerHTML)
+      .join('\n');
+  
+    const contentHtml = printRef.current.innerHTML;
+  
+    doc.open();
+    doc.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          ${headHtml}
+          <style>
+            @page { size: A4; margin: 0; }
+            html, body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          </style>
+        </head>
+        <body>
+          ${contentHtml}
+        </body>
+      </html>
+    `);
+    doc.close();
+  
+    // Aguarda o iframe “assentar” e imprime
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+  
+      // Remove depois de abrir a impressão
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 500);
+    }, 50);
   };
 
   return (
@@ -31,7 +88,11 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
 
         {/* Content Area - Scrollable */}
         <div className="flex-1 overflow-auto bg-gray-100 p-4 md:p-8 print:p-0 print:overflow-visible">
-             <div id="print-area" className="bg-white shadow-lg mx-auto print:shadow-none print:m-0">
+             <div
+                id="print-area"
+                ref={printRef}
+                className="bg-white shadow-lg mx-auto print:shadow-none print:m-0"
+              >
               <PrintOrder order={order} />
             </div>
         </div>
@@ -51,17 +112,6 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
               height: auto !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
-            }
-            body > :not([data-radix-portal]) {
-              display: none !important;
-            }
-            
-            [data-radix-portal] {
-              display: block !important;
-            }
-
-            [data-radix-dialog-overlay] {
-              display: none !important;
             }
         
             /* Neutraliza Radix/Shadcn Dialog (fixed + transform) durante impressão */
