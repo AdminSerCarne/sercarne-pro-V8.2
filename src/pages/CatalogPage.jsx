@@ -298,6 +298,50 @@ const CatalogPage = () => {
     }
   }, [productTypeFilter, productTypeOptions]);
 
+  useEffect(() => {
+    const onScroll = () => {
+      const total = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+      );
+  
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      const viewport = window.innerHeight || document.documentElement.clientHeight || 0;
+  
+      const distanceToBottom = total - (scrollTop + viewport);
+  
+      const hasMore = visibleCount < filteredAndSortedProducts.length;
+      if (!hasMore) return;
+  
+      if (distanceToBottom > 600) return;
+  
+      // evita disparo em rajada
+      if (loadingMoreGuardRef.current) return;
+      loadingMoreGuardRef.current = true;
+  
+      setIsLoadingMore(true);
+      setVisibleCount((prev) =>
+        Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+      );
+  
+      setTimeout(() => {
+        setIsLoadingMore(false);
+        loadingMoreGuardRef.current = false;
+      }, 150);
+    };
+  
+    // dispara ao montar e ao atualizar lista (caso a página ainda seja curta)
+    onScroll();
+  
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+  
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [visibleCount, filteredAndSortedProducts.length]);
+  
   const clearCatalogFilters = useCallback(() => {
     setSearchTerm('');
     setBrandFilter('all');
@@ -675,16 +719,6 @@ const getScrollParent = (node) => {
                     />
                   ))}
                 </div>
-            
-                {visibleCount < filteredAndSortedProducts.length && (
-                <div ref={loadMoreRef} className="flex justify-center items-center py-8">
-                  {isLoadingMore ? (
-                    <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
-                  ) : (
-                    <span className="sr-only">Carregar mais</span>
-                  )}
-                </div>
-              )}
               </>
             )}
 
