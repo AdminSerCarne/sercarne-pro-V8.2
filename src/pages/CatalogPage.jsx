@@ -385,8 +385,8 @@ const CatalogPage = () => {
               </p>
             </div>
 
-            <div className="w-full md:w-auto flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+              <div className="w-full md:flex-1 md:min-w-0 flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-full md:justify-end items-center">
                 <div className="relative w-full sm:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                   <Input
