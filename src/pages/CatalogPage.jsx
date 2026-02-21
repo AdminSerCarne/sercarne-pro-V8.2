@@ -420,7 +420,7 @@ const CatalogPage = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-start text-left pl-3">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Marca" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
@@ -434,7 +434,7 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={comboFilter} onValueChange={setComboFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-start text-left pl-3">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Combo" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
@@ -445,7 +445,7 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-start text-left pl-3">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Tipo de produto" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
@@ -459,7 +459,7 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={sortMode} onValueChange={setSortMode}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-start text-left pl-3">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Ordenação" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
