@@ -413,8 +413,8 @@ const CatalogPage = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
-                    <SelectValue placeholder="Marca" />
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue className="truncate" placeholder="Marca" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="all">Marca: todas</SelectItem>
@@ -427,8 +427,8 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={comboFilter} onValueChange={setComboFilter}>
-                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
-                    <SelectValue placeholder="Combo" />
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue className="truncate" placeholder="Combo" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="all">Combo: todos</SelectItem>
@@ -438,8 +438,8 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
-                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
-                    <SelectValue placeholder="Tipo de produto" />
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue className="truncate" placeholder="Tipo de produto" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="all">Tipo: todos</SelectItem>
@@ -452,8 +452,8 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={sortMode} onValueChange={setSortMode}>
-                  <SelectTrigger className="bg-[#0a0a0a] border-white/10 text-white">
-                    <SelectValue placeholder="Ordenação" />
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white">
+                    <SelectValue className="truncate" placeholder="Ordenação" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="stock_desc">Maior estoque</SelectItem>
