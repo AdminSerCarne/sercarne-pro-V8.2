@@ -62,9 +62,39 @@ const isPastCutoffForDelivery = (deliveryDateISO, cutoffStr) => {
   return new Date() > cutoff;
 };
 
+const getValidDeliveryDays = (diasEntregaRaw) => {
+  const dayStr = String(diasEntregaRaw || '').toUpperCase();
+  const map = { DOM: 0, SEG: 1, TER: 2, QUA: 3, QUI: 4, SEX: 5, SAB: 6 };
+  const out = [];
+  Object.entries(map).forEach(([key, val]) => {
+    if (dayStr.includes(key)) out.push(val);
+  });
+  if (out.length === 0 && (dayStr.includes('DIARIO') || dayStr.includes('DIÁRIO'))) {
+    return [1, 2, 3, 4, 5];
+  }
+  return out;
+};
+
+const isAllowedRouteDate = (deliveryDateISO, diasEntregaRaw) => {
+  const allowedDays = getValidDeliveryDays(diasEntregaRaw);
+  if (allowedDays.length === 0) return true;
+  const date = new Date(`${deliveryDateISO}T00:00:00`);
+  if (isNaN(date.getTime())) return false;
+  return allowedDays.includes(date.getDay());
+};
+
+const resolveIsAdminPower = (user) => {
+  if (!user) return false;
+  const level = Number(user?.Nivel ?? user?.nivel ?? 0);
+  if (Number.isFinite(level) && level >= 8) return true;
+  const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
+  return roleRaw.includes('admin') || roleRaw.includes('gestor');
+};
+
 const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
   const { cartItems, deliveryInfo, clearCart, notifyStockUpdate } = useCart();
   const { user } = useSupabaseAuth(); // perfil interno (public.usuarios)
+  const isAdminPower = resolveIsAdminPower(user);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -95,7 +125,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
       } else {
         // ✅ REGRA DO CORTE (dia anterior)
         const cutoffStr = deliveryInfo?.route_cutoff || "17:30h";
-        if (isPastCutoffForDelivery(dateStr, cutoffStr)) {
+        if (!isAdminPower && isPastCutoffForDelivery(dateStr, cutoffStr)) {
           errors.push(
             `Pra entrega em ${dateStr}, o corte foi ${cutoffStr} do dia anterior. Selecione a próxima data disponível.`
           );
@@ -159,7 +189,38 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         throw new Error("Perfil interno sem login (telefone). Verifique public.usuarios.login.");
       }
 
+      const cutoffRef = deliveryInfo?.route_cutoff || deliveryInfo?.cutoff || "17:30h";
+      const routeDays = deliveryInfo?.route_days || '';
       const routeNameForCapacity = deliveryInfo?.route_name || "SEM ROTA";
+      const needsRouteDayOverride = !isAllowedRouteDate(deliveryDateISO, routeDays);
+      const needsCutoffOverride = isPastCutoffForDelivery(deliveryDateISO, cutoffRef);
+      let adminOverrideLogLine = '';
+
+      if (needsRouteDayOverride || needsCutoffOverride) {
+        if (!isAdminPower) {
+          throw new Error(`Data ${deliveryDateISO} inválida para a rota ou fora do corte (${cutoffRef}).`);
+        }
+
+        const reasons = [];
+        if (needsRouteDayOverride) reasons.push('data fora dos dias da rota');
+        if (needsCutoffOverride) reasons.push(`pedido após corte (${cutoffRef})`);
+
+        const reason = String(
+          window.prompt(
+            `Override Admin detectado (${reasons.join(' + ')}). Informe o motivo obrigatório:`,
+            ''
+          ) || ''
+        ).trim();
+
+        if (!reason) {
+          throw new Error('Motivo obrigatório para override admin fora da regra operacional.');
+        }
+
+        const actor = user?.usuario || user?.login || 'admin';
+        const timestamp = new Date().toISOString();
+        adminOverrideLogLine = `[OVERRIDE LOGISTICA ${timestamp}] ${actor}: rota="${routeNameForCapacity}" data="${deliveryDateISO}" motivo="${reason}" regras=${reasons.join(', ')}`;
+      }
+
       const capacitySnapshot = await routeCapacityService.getRouteCapacitySnapshot({
         deliveryDate: deliveryDateISO,
         routeName: routeNameForCapacity,
@@ -194,6 +255,8 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         total: item.estimatedValue,
       }));
 
+      const observations = [String(obs || '').trim(), adminOverrideLogLine].filter(Boolean).join('\n');
+
       const orderData = {
         vendor_uid: authUid, // ✅ RLS usa auth.uid()
         vendor_id: vendorIdNorm, // informativo/relatório
@@ -213,7 +276,7 @@ const CheckoutModal = ({ isOpen, onClose, selectedClient }) => {
         total_value: totalValue,
         total_weight: totalWeight,
 
-        observations: obs,
+        observations,
         status: "PEDIDO ENVIADO",
         created_at: new Date().toISOString(),
       };

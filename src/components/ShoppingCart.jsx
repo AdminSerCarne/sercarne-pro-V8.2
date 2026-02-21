@@ -73,6 +73,14 @@ const isAllowedRouteDate = (deliveryDateISO, diasEntregaRaw) => {
   return allowedDays.includes(date.getDay());
 };
 
+const resolveIsAdminPower = (user) => {
+  if (!user) return false;
+  const level = Number(user?.Nivel ?? user?.nivel ?? 0);
+  if (Number.isFinite(level) && level >= 8) return true;
+  const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
+  return roleRaw.includes('admin') || roleRaw.includes('gestor');
+};
+
 const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   const {
     cartItems,
@@ -87,6 +95,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
   } = useCart();
 
   const { user } = useSupabaseAuth();
+  const isAdminPower = useMemo(() => resolveIsAdminPower(user), [user]);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -281,22 +290,63 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
 
       const cutoffRef = deliveryInfo.cutoff || deliveryInfo.route_cutoff || selectedRoute?.corte_ate || '17:00';
       const routeDays = selectedRoute?.dias_entrega || deliveryInfo?.route_days || '';
-      if (!isAllowedRouteDate(deliveryDateISO, routeDays)) {
-        toast({
-          variant: "destructive",
-          title: "Data inválida para a rota",
-          description: "Selecione uma data permitida para a rota escolhida.",
-        });
-        return;
-      }
+      const routeNameForCapacity =
+        deliveryInfo.route_name ||
+        selectedRoute?.descricao_grupo_rota ||
+        guestCity ||
+        'SEM ROTA';
 
-      if (isPastCutoffForDelivery(deliveryDateISO, cutoffRef)) {
+      const needsRouteDayOverride = !isAllowedRouteDate(deliveryDateISO, routeDays);
+      const needsCutoffOverride = isPastCutoffForDelivery(deliveryDateISO, cutoffRef);
+      let adminOverrideLogLine = '';
+
+      if (needsRouteDayOverride || needsCutoffOverride) {
+        if (!isAdminPower) {
+          if (needsRouteDayOverride) {
+            toast({
+              variant: "destructive",
+              title: "Data inválida para a rota",
+              description: "Selecione uma data permitida para a rota escolhida.",
+            });
+            return;
+          }
+
+          toast({
+            variant: "destructive",
+            title: "Prazo de corte excedido",
+            description: `Para entrega em ${deliveryDateISO}, o corte foi ${cutoffRef} do dia anterior.`,
+          });
+          return;
+        }
+
+        const reasons = [];
+        if (needsRouteDayOverride) reasons.push('data fora dos dias da rota');
+        if (needsCutoffOverride) reasons.push(`pedido após corte (${cutoffRef})`);
+
+        const reason = String(
+          window.prompt(
+            `Override Admin detectado (${reasons.join(' + ')}). Informe o motivo obrigatório:`,
+            ''
+          ) || ''
+        ).trim();
+
+        if (!reason) {
+          toast({
+            variant: 'destructive',
+            title: 'Motivo obrigatório',
+            description: 'Admin deve informar motivo para pedido fora da regra operacional.',
+          });
+          return;
+        }
+
+        const actor = user?.usuario || user?.login || 'admin';
+        const timestamp = new Date().toISOString();
+        adminOverrideLogLine = `[OVERRIDE LOGISTICA ${timestamp}] ${actor}: rota="${routeNameForCapacity}" data="${deliveryDateISO}" motivo="${reason}" regras=${reasons.join(', ')}`;
+
         toast({
-          variant: "destructive",
-          title: "Prazo de corte excedido",
-          description: `Para entrega em ${deliveryDateISO}, o corte foi ${cutoffRef} do dia anterior.`,
+          title: 'Override Admin aplicado',
+          description: 'Pedido seguirá com registro de auditoria em observações.',
         });
-        return;
       }
 
       if (hasPriceError) {
@@ -332,12 +382,6 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         refreshStockValidation();
         return;
       }
-
-      const routeNameForCapacity =
-        deliveryInfo.route_name ||
-        selectedRoute?.descricao_grupo_rota ||
-        guestCity ||
-        'SEM ROTA';
 
       const capacitySnapshot = await routeCapacityService.getRouteCapacitySnapshot({
         deliveryDate: deliveryDateISO,
@@ -391,6 +435,8 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
       
       const clientDoc = String(clientDocRaw).replace(/\D/g, '');
       const vendorLogin = String(user?.login || '').replace(/\D/g, '');
+      const baseObservation = user ? '' : `Contato: ${guestPhone}`;
+      const observations = [baseObservation, adminOverrideLogLine].filter(Boolean).join('\n');
 
       const orderData = {
         vendor_id: user ? (vendorLogin || user.id || 'VENDOR') : 'WEBSITE',
@@ -411,7 +457,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
         total_value: Number(totalValue || 0),
         total_weight: Number(totalWeight || 0),
 
-        observations: user ? '' : `Contato: ${guestPhone}`,
+        observations,
 
         status: ORDER_STATUS.ENVIADO
       };
@@ -558,6 +604,7 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
               route={selectedRoute}
               cartItem={drivingCartItem} // pode ser null quando carrinho vazio
               selectedDate={deliveryInfo?.delivery_date}
+              canBypassCutoff={isAdminPower}
               onDateSelect={(date) => {
                 setDeliveryInfo(prev => ({ ...prev, delivery_date: date }));
               }}

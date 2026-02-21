@@ -12,6 +12,7 @@ const DeliveryDateSelector = ({
   route, // { dias_entrega, corte_ate, descricao_grupo_rota... }
   selectedDate, // string yyyy-mm-dd | ISO | Date
   onDateSelect, // RECOMENDADO: salvar string yyyy-mm-dd no deliveryInfo
+  canBypassCutoff = false,
   className
 }) => {
   const [dates, setDates] = useState([]);
@@ -81,8 +82,8 @@ const DeliveryDateSelector = ({
   // deps estáveis
   const routeKey = useMemo(() => {
     if (!route) return '';
-    return `${String(route?.dias_entrega || '')}|${String(route?.corte_ate || '')}`;
-  }, [route]);
+    return `${String(route?.dias_entrega || '')}|${String(route?.corte_ate || '')}|${canBypassCutoff ? 'ADMIN' : 'STD'}`;
+  }, [route, canBypassCutoff]);
 
   const cartKey = useMemo(() => {
     const code = String(cartItem?.codigo ?? cartItem?.sku ?? '').trim();
@@ -149,10 +150,12 @@ const DeliveryDateSelector = ({
 
           // ✅ Cutoff é no dia anterior.
           // Então para ENTREGA AMANHÃ (i===1), só pode se ainda NÃO passou do cutoff HOJE.
-          if (i === 1 && isCutoffPassed) continue;
+          // Admin pode visualizar e selecionar com override.
+          const requiresCutoffOverride = i === 1 && isCutoffPassed;
+          if (requiresCutoffOverride && !canBypassCutoff) continue;
 
           if (validDayNumbers.includes(dayOfWeek)) {
-            potentialDates.push(d);
+            potentialDates.push({ date: d, requiresCutoffOverride });
             foundCount++;
             if (foundCount >= 4) break;
           }
@@ -163,7 +166,8 @@ const DeliveryDateSelector = ({
 
         // MODO A: com produto → calcula estoque e pinta
         if (hasProductContext) {
-          for (const date of potentialDates) {
+          for (const candidate of potentialDates) {
+            const date = candidate.date;
             const result = await schlosserApi.calculateAvailableStock(productCode, date);
             const available = Number(result?.availableStock ?? 0);
             const isSufficient = available >= qtyNeededSafe;
@@ -175,7 +179,8 @@ const DeliveryDateSelector = ({
               fullDateStr: format(date, 'yyyy-MM-dd'),
               availableStock: available,
               isSufficient,
-              status: isSufficient ? 'green' : 'red'
+              status: isSufficient ? 'green' : 'red',
+              requiresCutoffOverride: Boolean(candidate.requiresCutoffOverride),
             };
 
             calculatedDates.push(dateObj);
@@ -183,7 +188,8 @@ const DeliveryDateSelector = ({
           }
         } else {
           // MODO B: sem produto → lista neutra
-          for (const date of potentialDates) {
+          for (const candidate of potentialDates) {
+            const date = candidate.date;
             calculatedDates.push({
               date,
               dayName: format(date, 'EEEE', { locale: ptBR }),
@@ -191,7 +197,8 @@ const DeliveryDateSelector = ({
               fullDateStr: format(date, 'yyyy-MM-dd'),
               availableStock: null,
               isSufficient: true,
-              status: 'neutral'
+              status: 'neutral',
+              requiresCutoffOverride: Boolean(candidate.requiresCutoffOverride),
             });
           }
         }
@@ -296,6 +303,10 @@ const DeliveryDateSelector = ({
             icon = <XCircle size={14} />;
           }
 
+          if (dateObj.requiresCutoffOverride && !isSelected) {
+            containerClass = "bg-amber-900/20 border-amber-500/40 text-amber-300 hover:bg-amber-900/25";
+          }
+
           return (
             <TooltipProvider key={idx}>
               <Tooltip>
@@ -323,6 +334,11 @@ const DeliveryDateSelector = ({
                           Sugerida
                         </Badge>
                       )}
+                      {dateObj.requiresCutoffOverride && (
+                        <Badge className="bg-amber-600 text-white text-[9px] h-4 px-1.5 hover:bg-amber-600">
+                          Fora do corte (Admin)
+                        </Badge>
+                      )}
                     </div>
 
                     <div className="flex flex-col items-end">
@@ -344,6 +360,9 @@ const DeliveryDateSelector = ({
                     <>
                       <p>Estoque disponível nesta data: {dateObj.availableStock}</p>
                       {!dateObj.isSufficient && <p className="text-red-300">Quantidade insuficiente para seu pedido.</p>}
+                      {dateObj.requiresCutoffOverride && (
+                        <p className="text-amber-300">Data após corte. Somente admin pode confirmar com motivo.</p>
+                      )}
                     </>
                   ) : (
                     <p>Selecione a data de entrega para continuar.</p>

@@ -24,7 +24,8 @@ import {
   Calendar,
   Filter,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  Route as RouteIcon,
 } from 'lucide-react';
 
 import { format, isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
@@ -94,6 +95,24 @@ const formatListWithOverflow = (items, limit = 3) => {
   const visible = safe.slice(0, limit);
   const remaining = safe.length - visible.length;
   return remaining > 0 ? `${visible.join(', ')} +${remaining}` : visible.join(', ');
+};
+
+const normalizeDateInputToISO = (rawValue) => {
+  const dateKey = toDateKey(rawValue);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return '';
+  return dateKey;
+};
+
+const normalizeCutoffInput = (rawValue, fallback = '17:00') => {
+  const str = String(rawValue || '').replace('h', '').trim();
+  const match = str.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return fallback;
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    return fallback;
+  }
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 };
 
 const escapeHtml = (value) =>
@@ -647,6 +666,96 @@ const VendorDashboard = () => {
     setIsDetailsModalOpen(true);
   };
 
+  const handleAdminEditLogistics = async (order) => {
+    if (userRole !== 'admin') return;
+    if (!order?.id) return;
+
+    const currentRoute = String(order?.route_name || order?.delivery_city || '').trim();
+    const currentDate = normalizeDateInputToISO(order?.delivery_date || order?.created_at);
+    const currentCutoff = String(order?.cutoff || '17:00');
+
+    const nextRouteRaw = window.prompt('Nova rota do pedido:', currentRoute || '');
+    if (nextRouteRaw === null) return;
+    const nextRoute = String(nextRouteRaw || '').trim();
+    if (!nextRoute) {
+      toast({
+        title: 'Rota obrigatória',
+        description: 'Informe a nova rota para salvar a alteração.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const nextDateRaw = window.prompt('Nova data de entrega (YYYY-MM-DD):', currentDate || '');
+    if (nextDateRaw === null) return;
+    const nextDate = normalizeDateInputToISO(nextDateRaw);
+    if (!nextDate) {
+      toast({
+        title: 'Data inválida',
+        description: 'Use o formato YYYY-MM-DD para a data de entrega.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const nextCutoffRaw = window.prompt('Novo horário de corte (HH:mm):', currentCutoff);
+    if (nextCutoffRaw === null) return;
+    const nextCutoff = normalizeCutoffInput(nextCutoffRaw, currentCutoff);
+
+    const reason = String(window.prompt('Motivo da alteração (obrigatório):', '') || '').trim();
+    if (!reason) {
+      toast({
+        title: 'Motivo obrigatório',
+        description: 'Alteração logística por admin exige motivo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const actor = user?.usuario || user?.login || 'admin';
+    const nowIso = new Date().toISOString();
+    const auditLine = `[AJUSTE LOGISTICA ${nowIso}] ${actor}: rota "${currentRoute || '-'}" -> "${nextRoute}", data "${currentDate || '-'}" -> "${nextDate}", corte "${currentCutoff}" -> "${nextCutoff}". Motivo: ${reason}`;
+    const currentObs = String(order?.observations || '').trim();
+
+    setProcessingId(order.id);
+    try {
+      const payload = {
+        route_name: nextRoute,
+        route_id: String(order?.route_id || nextRoute),
+        delivery_date: nextDate,
+        cutoff: nextCutoff,
+        observations: currentObs ? `${currentObs}\n${auditLine}` : auditLine,
+        updated_at: nowIso,
+      };
+
+      const { data, error } = await supabase
+        .from('pedidos')
+        .update(payload)
+        .eq('id', order.id)
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      if (!data?.id) throw new Error('Atualização não aplicada.');
+
+      toast({
+        title: 'Logística atualizada',
+        description: `Pedido #${String(order.id).slice(0, 8).toUpperCase()} ajustado com sucesso.`,
+      });
+
+      await fetchOrders();
+    } catch (err) {
+      console.error('[VendorDashboard] admin edit logistics error:', err);
+      toast({
+        title: 'Erro ao editar logística',
+        description: err?.message || 'Falha ao atualizar rota/data/corte do pedido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handlePrintDayRouteClients = () => {
     if (userRole !== 'admin') return;
 
@@ -1060,6 +1169,19 @@ const VendorDashboard = () => {
                               order={order}
                               className="h-9 w-9 p-0 text-gray-400 hover:text-green-500 hover:bg-green-500/10 rounded-md transition-colors flex items-center justify-center"
                             />
+
+                            {userRole === 'admin' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                disabled={isBusy}
+                                onClick={() => handleAdminEditLogistics(order)}
+                                className="text-gray-400 hover:text-orange-300 hover:bg-white/10"
+                                title="Editar rota/data/corte (Admin)"
+                              >
+                                <RouteIcon size={18} />
+                              </Button>
+                            )}
 
                             {/* CONFIRMAR */}
                             <Button
