@@ -103,7 +103,8 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
     // Remove depois de abrir a impressão
     setTimeout(() => {
       document.body.removeChild(iframe);
-    }, 800);
+    }, 800);  
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
