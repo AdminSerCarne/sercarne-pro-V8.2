@@ -420,8 +420,10 @@ const CatalogPage = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
-                    <SelectValue className="flex-1 text-left truncate" placeholder="Marca" />
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
+                    [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
+                    [&>svg]:shrink-0">
+                    <SelectValue placeholder="Marca" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
                     <SelectItem value="all">Marca: todas</SelectItem>
@@ -434,7 +436,9 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={comboFilter} onValueChange={setComboFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
+                    [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
+                    [&>svg]:shrink-0">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Combo" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
@@ -445,7 +449,9 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
+                  [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
+                  [&>svg]:shrink-0">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Tipo de produto" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
@@ -459,7 +465,9 @@ const CatalogPage = () => {
                 </Select>
 
                 <Select value={sortMode} onValueChange={setSortMode}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
+                  [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
+                  [&>svg]:shrink-0">
                     <SelectValue className="flex-1 text-left truncate" placeholder="Ordenação" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1a1a1a] border-white/10 text-white">
