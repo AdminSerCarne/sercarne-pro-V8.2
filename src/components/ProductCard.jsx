@@ -126,7 +126,6 @@ const ProductCard = ({ product }) => {
     const deltaX = touchEndX.current - touchStartX.current;
     const deltaY = touchEndY.current - touchStartY.current;
     if (didScrollRef.current) {
-      didScrollRef.current = false;
       didSwipeRef.current = false;
       return;
     }
