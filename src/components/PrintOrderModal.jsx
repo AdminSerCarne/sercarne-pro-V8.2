@@ -115,13 +115,12 @@ const PrintOrderModal = ({ isOpen, onClose, order }) => {
                 <Printer size={20} className="text-gray-600"/> Visualização de Impressão
             </h2>
             <div className="flex gap-2">
-                <Button 
-                  variant="outline"
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={onClose}
-                  className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                  className="border border-black bg-black text-white hover:bg-gray-700 hover:border-black"
                 >
-                  <X className="w-4 h-4 mr-2" /> Fechar
+                  <X className="w-4 h-4 mr-2 text-white" /> Fechar
                 </Button>
                 <Button size="sm" onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white">
                     <Printer className="w-4 h-4 mr-2" /> Imprimir
