@@ -441,9 +441,7 @@ const CatalogPage = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
-                    [&>span]:block [&>span]:flex-1 [&>span]:min-w-0 [&>span]:text-left [&>span]:truncate
-                    [&>svg]:shrink-0">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
                     {(() => {
                       if (brandFilter === 'all') {
                         return <span className="truncate text-left">Marca: todas</span>;
@@ -453,17 +451,17 @@ const CatalogPage = () => {
                       const logo = meta?.logo;
                     
                       return (
-                        <span className="flex items-center gap-2 min-w-0 text-left">
+                        <span className="flex flex-row items-center gap-2 min-w-0 text-left whitespace-nowrap">
                           {logo ? (
                             <img
                               src={logo}
                               alt={brandFilter}
-                              className="h-5 w-5 rounded-sm object-contain bg-white/5"
+                              className="h-5 w-5 shrink-0 rounded-sm object-contain bg-white/5"
                               loading="lazy"
                               decoding="async"
                             />
                           ) : null}
-                          <span className="truncate">{brandFilter}</span>
+                          <span className="min-w-0 flex-1 truncate">{brandFilter}</span>
                         </span>
                       );
                     })()}
