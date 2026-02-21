@@ -26,6 +26,7 @@ import {
   AlertCircle,
   RotateCcw,
   Route as RouteIcon,
+  Undo2,
 } from 'lucide-react';
 
 import { format, isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
@@ -532,6 +533,11 @@ const VendorDashboard = () => {
   const isTransitionAllowed = (fromStatus, toStatus) => {
     if (!toStatus || fromStatus === toStatus) return false;
 
+    // Admin pode cancelar inclusive após entrega (devolução/cancelamento pós-entrega)
+    if (userRole === 'admin' && fromStatus === ORDER_STATUS.ENTREGUE && toStatus === ORDER_STATUS.CANCELADO) {
+      return true;
+    }
+
     // Níveis 1-5: somente cancelar se estiver ENVIADO
     if (userRole !== 'admin' && userLevel >= 1 && userLevel <= 5) {
       return fromStatus === ORDER_STATUS.ENVIADO && toStatus === ORDER_STATUS.CANCELADO;
@@ -552,8 +558,10 @@ const VendorDashboard = () => {
   // -----------------------------------------
   // ✅ Status update alinhado ao Manual V8.4
   // -----------------------------------------
-  const updateOrderStatus = async (order, newStatus) => {
+  const updateOrderStatus = async (order, newStatus, options = {}) => {
     if (!order?.id) return;
+    const actionKind = String(options?.actionKind || '').trim().toUpperCase();
+    const isDevolution = actionKind === 'DEVOLUCAO';
 
     if (userRole !== 'admin') {
       if (vendorId && onlyDigits(order?.vendor_id) !== vendorId) {
@@ -570,6 +578,15 @@ const VendorDashboard = () => {
     const currentStatus = normalizeStatus(order.status);
     const dbStatus = normalizeStatus(newStatus);
 
+    if (isDevolution && userRole !== 'admin') {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Somente admin pode registrar devolução pós-entrega.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!isTransitionAllowed(currentStatus, dbStatus)) {
       toast({
         title: 'Transição não permitida',
@@ -581,11 +598,16 @@ const VendorDashboard = () => {
 
     let cancelReason = '';
     if (dbStatus === ORDER_STATUS.CANCELADO && (userRole === 'admin' || userLevel >= 6)) {
-      cancelReason = String(window.prompt('Informe o motivo do cancelamento:') || '').trim();
+      const promptLabel = isDevolution
+        ? 'Informe o motivo da devolução (retorno ao estoque):'
+        : 'Informe o motivo do cancelamento:';
+      cancelReason = String(window.prompt(promptLabel) || '').trim();
       if (!cancelReason) {
         toast({
           title: 'Motivo obrigatório',
-          description: 'Cancelamentos por níveis 6-10 exigem motivo.',
+          description: isDevolution
+            ? 'Devolução exige motivo obrigatório.'
+            : 'Cancelamentos por níveis 6-10 exigem motivo.',
           variant: 'destructive',
         });
         return;
@@ -608,7 +630,8 @@ const VendorDashboard = () => {
       if (dbStatus === ORDER_STATUS.CANCELADO && cancelReason) {
         const actor = user?.usuario || user?.login || 'usuario';
         const currentObs = String(order?.observations || '').trim();
-        const reasonLine = `[CANCELAMENTO ${updatePayload.updated_at}] ${actor}: ${cancelReason}`;
+        const reasonTag = isDevolution ? 'DEVOLUCAO POS-ENTREGA' : 'CANCELAMENTO';
+        const reasonLine = `[${reasonTag} ${updatePayload.updated_at}] ${actor}: ${cancelReason}`;
         updatePayload.observations = currentObs ? `${currentObs}\n${reasonLine}` : reasonLine;
       }
 
@@ -623,9 +646,14 @@ const VendorDashboard = () => {
       if (!data?.id) throw new Error('Update não afetou nenhuma linha (provável RLS/policy).');
 
       toast({
-        title: 'Status atualizado!',
-        description: `Pedido #${String(id).slice(0, 8).toUpperCase()} agora está "${statusLabel(dbStatus)}"`,
+        title: isDevolution ? 'Devolução registrada!' : 'Status atualizado!',
+        description: isDevolution
+          ? `Pedido #${String(id).slice(0, 8).toUpperCase()} devolvido e retornado ao estoque.`
+          : `Pedido #${String(id).slice(0, 8).toUpperCase()} agora está "${statusLabel(dbStatus)}"`,
         className:
+          isDevolution
+            ? 'bg-amber-700 text-white'
+            :
           dbStatus === ORDER_STATUS.CONFIRMADO
             ? 'bg-green-800 text-white'
             : dbStatus === ORDER_STATUS.CANCELADO
@@ -1253,16 +1281,36 @@ const VendorDashboard = () => {
                                 <RotateCcw size={18} />
                               </Button>
                             ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={isBusy}
-                                onClick={() => updateOrderStatus(order, ORDER_STATUS.CANCELADO)}
-                                className="text-gray-400 hover:text-red-400 hover:bg-white/10"
-                                title="Cancelar (devolve estoque)"
-                              >
-                                <X size={18} />
-                              </Button>
+                              <>
+                                {userRole === 'admin' && statusUpper === ORDER_STATUS.ENTREGUE && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={isBusy}
+                                    onClick={() =>
+                                      updateOrderStatus(order, ORDER_STATUS.CANCELADO, { actionKind: 'DEVOLUCAO' })
+                                    }
+                                    className="text-gray-400 hover:text-amber-300 hover:bg-white/10"
+                                    title="Registrar devolução (retorna ao estoque)"
+                                  >
+                                    <Undo2 size={18} />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={isBusy || (statusUpper === ORDER_STATUS.ENTREGUE && userRole !== 'admin')}
+                                  onClick={() => updateOrderStatus(order, ORDER_STATUS.CANCELADO)}
+                                  className="text-gray-400 hover:text-red-400 hover:bg-white/10"
+                                  title={
+                                    statusUpper === ORDER_STATUS.ENTREGUE
+                                      ? 'Cancelar pós-entrega (Admin)'
+                                      : 'Cancelar (devolve estoque)'
+                                  }
+                                >
+                                  <X size={18} />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </td>
