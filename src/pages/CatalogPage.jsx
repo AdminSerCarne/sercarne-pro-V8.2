@@ -373,17 +373,24 @@ const CatalogPage = () => {
         )}
 
         <div className="bg-[#121212] p-6 rounded-xl shadow-2xl border border-white/10 mb-8 backdrop-blur-sm pointer-events-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-              <h2 className="text-2xl font-serif font-bold text-white mb-1">Produtos Disponíveis</h2>
-              <p className="text-sm text-gray-500">
-                {user
-                  ? (userLevel >= 5 ? `Tabela Aplicada: ${user.tab_preco || 'Padrão'}` : 'Preços personalizados ativos')
-                  : 'Faça login para ver preços personalizados'}
-                {loadingSortStock ? ' • Ordenando por estoque do dia…' : ''}
-                {!loading && !error ? ` • ${filteredAndSortedProducts.length}/${products.length} itens` : ''}
-              </p>
-            </div>
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+          <div className="md:w-[420px] md:shrink-0">
+            <h2 className="text-2xl font-serif font-bold text-white mb-1">Produtos Disponíveis</h2>
+            <p className="text-sm text-gray-500">
+              {user
+                ? (userLevel >= 5 ? `Tabela Aplicada: ${user.tab_preco || 'Padrão'}` : 'Preços personalizados ativos')
+                : 'Faça login para ver preços personalizados'}
+              {loadingSortStock ? ' • Ordenando por estoque do dia…' : ''}
+              {!loading && !error ? (
+              <>
+                {' • '}
+                <span className="inline-block tabular-nums min-w-[90px]">
+                  {filteredAndSortedProducts.length}/{products.length} itens
+                </span>
+              </>
+            ) : ''}
+            </p>
+          </div>
 
               <div className="w-full md:flex-1 md:min-w-0 flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-full md:justify-end items-center">
