@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import ProductCard from '@/components/ProductCard';
@@ -89,10 +89,6 @@ const CatalogPage = () => {
   const [error, setError] = useState(null);
   const ITEMS_STEP = 24;
   const [visibleCount, setVisibleCount] = useState(ITEMS_STEP);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const loadMoreRef = useRef(null);
-  const loadingMoreGuardRef = useRef(false);
-  const [mountTick, setMountTick] = useState(0);
 
   // papel para schlosserApi (publico vs vendedor)
   const role = user ? 'vendedor' : 'publico';
@@ -127,10 +123,6 @@ const CatalogPage = () => {
     refreshProducts();
   }, [refreshProducts]);
 
-  useEffect(() => {
-    const t = setTimeout(() => setMountTick((v) => v + 1), 0);
-    return () => clearTimeout(t);
-  }, []);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [brandFilter, setBrandFilter] = useState('all');
@@ -312,11 +304,6 @@ const CatalogPage = () => {
     setSortMode('stock_desc');
   }, []);
 
-  const handleLoadMore = useCallback(() => {
-  setVisibleCount((prev) =>
-    Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
-  );
-  }, [ITEMS_STEP, filteredAndSortedProducts.length]);
   // -----------------------------------
   // Filter + Sort
   // -----------------------------------
@@ -375,88 +362,18 @@ const CatalogPage = () => {
     return filteredAndSortedProducts.slice(0, visibleCount);
   }, [filteredAndSortedProducts, visibleCount]);
 
+  const handleLoadMore = useCallback(() => {
+  setVisibleCount((prev) =>
+      Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+    );
+  }, [filteredAndSortedProducts.length]);
+  
   useEffect(() => {
     setVisibleCount(ITEMS_STEP);
   }, [brandFilter, comboFilter, productTypeFilter, sortMode, searchTerm]);
 
   // encontra automaticamente o "scroll container" (se existir)
-const getScrollParent = (node) => {
-  if (!node) return null;
 
-  let parent = node.parentElement;
-  while (parent) {
-    const style = window.getComputedStyle(parent);
-    const overflowY = style.overflowY;
-
-    const isScrollable = (overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight;
-    if (isScrollable) return parent;
-
-    parent = parent.parentElement;
-  }
-
-  return null; // se não achar, usa viewport (root null)
-};
-
-  useEffect(() => {
-  const el = loadMoreRef.current;
-  if (!el) return;
-
-    const rootEl = getScrollParent(el); // pode ser null (aí usamos window)
-  
-    const getScrollInfo = () => {
-      if (!rootEl) {
-        // scroll do window
-        const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-        const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
-        const scrollH = document.documentElement.scrollHeight || 0;
-        return { scrollTop, viewportH, scrollH };
-      }
-  
-      // scroll de um container
-      return {
-        scrollTop: rootEl.scrollTop,
-        viewportH: rootEl.clientHeight,
-        scrollH: rootEl.scrollHeight,
-      };
-    };
-  
-    const maybeLoadMore = () => {
-      const hasMore = visibleCount < filteredAndSortedProducts.length;
-      if (!hasMore) return;
-  
-      // evita disparos repetidos
-      if (loadingMoreGuardRef.current) return;
-  
-      const { scrollTop, viewportH, scrollH } = getScrollInfo();
-  
-      // quando estiver perto do final (ajuste aqui se quiser)
-      const distanceToBottom = scrollH - (scrollTop + viewportH);
-      if (distanceToBottom > 600) return;
-  
-      loadingMoreGuardRef.current = true;
-      setIsLoadingMore(true);
-  
-      setVisibleCount((prev) =>
-        Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
-      );
-  
-      setTimeout(() => {
-        setIsLoadingMore(false);
-        loadingMoreGuardRef.current = false;
-      }, 150);
-    };
-  
-    // roda 1x ao montar (caso a lista ainda esteja curta)
-    maybeLoadMore();
-  
-    const target = rootEl || window;
-    target.addEventListener('scroll', maybeLoadMore, { passive: true });
-  
-    return () => {
-      target.removeEventListener('scroll', maybeLoadMore);
-    };
-  }, [visibleCount, filteredAndSortedProducts.length, mountTick]);
-  
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200">
       <Helmet>
