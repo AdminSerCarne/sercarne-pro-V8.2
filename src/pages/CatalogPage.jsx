@@ -312,6 +312,11 @@ const CatalogPage = () => {
     setSortMode('stock_desc');
   }, []);
 
+  const handleLoadMore = useCallback(() => {
+  setVisibleCount((prev) =>
+    Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+  );
+  }, [ITEMS_STEP, filteredAndSortedProducts.length]);
   // -----------------------------------
   // Filter + Sort
   // -----------------------------------
@@ -682,12 +687,14 @@ const getScrollParent = (node) => {
                   ))}
                 </div>
                 {visibleCount < filteredAndSortedProducts.length && (
-                <div ref={loadMoreRef} className="flex justify-center items-center py-8">
-                  {isLoadingMore ? (
-                    <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
-                  ) : (
-                    <span className="sr-only">Carregar mais</span>
-                  )}
+                <div className="flex justify-center py-10">
+                  <Button
+                    type="button"
+                    onClick={handleLoadMore}
+                    className="bg-[#FF6B35] hover:bg-[#ff5a1f] text-white"
+                  >
+                    Carregar mais
+                  </Button>
                 </div>
               )}
               </>
