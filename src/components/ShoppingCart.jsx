@@ -625,16 +625,23 @@ const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {
             </div>
           ) : (
             <div className="space-y-3 pb-4">
-              {(processedItems || []).map((item) => (
+            {(processedItems || []).map((item) => {
+              const w = Number(item?.estimatedWeight || 0);
+              const v = Number(item?.estimatedValue || 0);
+              const pricePerKgDisplay = w > 0 ? (v / w) : 0;
+            
+              return (
                 <CartItemControls
                   key={item.codigo}
                   item={item}
+                  pricePerKgDisplay={pricePerKgDisplay}
                   onUpdateQuantity={updateItemQuantity}
                   onRemove={removeFromCart}
                   deliveryDate={deliveryInfo?.delivery_date}
                   validationStatus={validationStatuses[item.codigo]}
                 />
-              ))}
+              );
+            })}
             </div>
           )}
         </div>
