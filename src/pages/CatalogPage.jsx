@@ -617,26 +617,29 @@ const CatalogPage = () => {
                 <p>Carregando catálogo...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {visibleProducts.map(product => (
-                  <ProductCard
-                    key={product.id || product.codigo}
-                    product={product}
-                  />
-                ))}
-              </div>
-              {visibleCount < filteredAndSortedProducts.length && (
-              <div ref={loadMoreRef} className="flex justify-center items-center py-8 text-gray-500">
-                {isLoadingMore ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
-                    <span>Carregando mais...</span>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {visibleProducts.map(product => (
+                    <ProductCard
+                      key={product.id || product.codigo}
+                      product={product}
+                    />
+                  ))}
+                </div>
+            
+                {visibleCount < filteredAndSortedProducts.length && (
+                  <div ref={loadMoreRef} className="flex justify-center items-center py-8 text-gray-500">
+                    {isLoadingMore ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-5 h-5 text-[#FF6B35] animate-spin" />
+                        <span>Carregando mais...</span>
+                      </div>
+                    ) : (
+                      <span>Role para carregar mais</span>
+                    )}
                   </div>
-                ) : (
-                  <span>Role para carregar mais</span>
                 )}
-              </div>
-            )}
+              </>
             )}
 
             {!loading && !error && filteredAndSortedProducts.length === 0 && (
