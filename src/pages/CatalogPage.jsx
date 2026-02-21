@@ -20,7 +20,7 @@ import { getAvailableStockForDateBatch } from '@/utils/stockValidator';
 // ✅ FONTE OFICIAL (manual): schlosserApi GVIZ
 import { schlosserApi } from '@/services/schlosserApi';
 
-const [initialStockReady, setInitialStockReady] = useState(false);
+
 
 const normalizeTextUpper = (value) => String(value ?? '').trim().toUpperCase();
 
@@ -81,6 +81,7 @@ const getStockValueFromMap = (product, stockMapToday) => {
 const CatalogPage = () => {
   const { user } = useSupabaseAuth();
   const { notifyStockUpdate, stockUpdateTrigger } = useCart();
+  const [initialStockReady, setInitialStockReady] = useState(false);
 
   // ✅ substitui useProducts mantendo o mesmo “contrato”
   const [products, setProducts] = useState([]);
