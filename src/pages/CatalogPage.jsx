@@ -387,43 +387,63 @@ const getScrollParent = (node) => {
 };
 
   useEffect(() => {
-    const el = loadMoreRef.current;
-    if (!el) return;
+  const el = loadMoreRef.current;
+  if (!el) return;
+
+    const rootEl = getScrollParent(el); // pode ser null (aí usamos window)
   
-    const hasMore = visibleCount < filteredAndSortedProducts.length;
-    if (!hasMore) return;
-  
-    const rootEl = getScrollParent(el);
-  
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting) return;
-  
-        // evita disparar várias vezes enquanto está na tela
-        if (loadingMoreGuardRef.current) return;
-        loadingMoreGuardRef.current = true;
-  
-        setIsLoadingMore(true);
-  
-        setVisibleCount((prev) =>
-          Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
-        );
-  
-        setTimeout(() => {
-          setIsLoadingMore(false);
-          loadingMoreGuardRef.current = false;
-        }, 150);
-      },
-      {
-        root: rootEl || null,
-        rootMargin: "600px",
-        threshold: 0,
+    const getScrollInfo = () => {
+      if (!rootEl) {
+        // scroll do window
+        const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+        const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+        const scrollH = document.documentElement.scrollHeight || 0;
+        return { scrollTop, viewportH, scrollH };
       }
-    );
   
-    observer.observe(el);
-    return () => observer.disconnect();
+      // scroll de um container
+      return {
+        scrollTop: rootEl.scrollTop,
+        viewportH: rootEl.clientHeight,
+        scrollH: rootEl.scrollHeight,
+      };
+    };
+  
+    const maybeLoadMore = () => {
+      const hasMore = visibleCount < filteredAndSortedProducts.length;
+      if (!hasMore) return;
+  
+      // evita disparos repetidos
+      if (loadingMoreGuardRef.current) return;
+  
+      const { scrollTop, viewportH, scrollH } = getScrollInfo();
+  
+      // quando estiver perto do final (ajuste aqui se quiser)
+      const distanceToBottom = scrollH - (scrollTop + viewportH);
+      if (distanceToBottom > 600) return;
+  
+      loadingMoreGuardRef.current = true;
+      setIsLoadingMore(true);
+  
+      setVisibleCount((prev) =>
+        Math.min(prev + ITEMS_STEP, filteredAndSortedProducts.length)
+      );
+  
+      setTimeout(() => {
+        setIsLoadingMore(false);
+        loadingMoreGuardRef.current = false;
+      }, 150);
+    };
+  
+    // roda 1x ao montar (caso a lista ainda esteja curta)
+    maybeLoadMore();
+  
+    const target = rootEl || window;
+    target.addEventListener('scroll', maybeLoadMore, { passive: true });
+  
+    return () => {
+      target.removeEventListener('scroll', maybeLoadMore);
+    };
   }, [visibleCount, filteredAndSortedProducts.length]);
   
   return (
