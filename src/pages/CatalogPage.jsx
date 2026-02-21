@@ -441,7 +441,9 @@ const CatalogPage = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                  <SelectTrigger className="w-full min-w-0 bg-[#0a0a0a] border-white/10 text-white justify-between pl-3 pr-3
+                    [&>span]:line-clamp-none [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&>span]:min-w-0
+                    [&>svg]:ml-2 [&>svg]:shrink-0">
                     {(() => {
                       if (brandFilter === 'all') {
                         return <span className="truncate text-left">Marca: todas</span>;
