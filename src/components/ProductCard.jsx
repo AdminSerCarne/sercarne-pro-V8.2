@@ -160,9 +160,21 @@ const ProductCard = ({ product }) => {
   const totalUNDIfAdd = cartTotalUND + quantity;
 
   const pricesObj = product?.prices || {};
-  const { price } = useMemo(() => {
+  const { price, tabName } = useMemo(() => {
     return schlosserRules.getTabelaAplicada(totalUNDIfAdd, user, pricesObj);
   }, [totalUNDIfAdd, user, pricesObj]);
+
+  const userLevel = useMemo(() => {
+    if (!user) return 0;
+    const n = Number(user?.Nivel ?? user?.nivel);
+    if (Number.isFinite(n) && n > 0) return n;
+    const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
+    if (roleRaw.includes('admin') || roleRaw.includes('gestor')) return 10;
+    return 0;
+  }, [user]);
+
+  const appliedTabLabel = String(tabName || '').toUpperCase().trim();
+  const showAppliedTab = Boolean(user && userLevel >= 5 && /^TAB[0-5]$/.test(appliedTabLabel));
 
   const unit = resolveProductUnitType(product, 'UND');
   const isPctSale = unit === 'PCT';
@@ -590,11 +602,17 @@ const ProductCard = ({ product }) => {
               <span className="text-xs text-gray-400 font-bold uppercase">/ {isPctSale ? 'PCT' : 'KG'}</span>
             </div>
 
-            <div className="h-5">
+            <div className="min-h-[20px] flex flex-wrap items-center gap-1">
               {showDiscount && (
                 <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-1.5 py-0.5 rounded w-fit border border-green-100 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
                   <Tag size={10} className="flex-shrink-0" />
                   <span>{discountPercent.toFixed(0)}% abaixo do preço público</span>
+                </div>
+              )}
+              {showAppliedTab && (
+                <div className="flex items-center gap-1 text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded w-fit border border-blue-100 whitespace-nowrap">
+                  <Tag size={10} className="flex-shrink-0" />
+                  <span>{appliedTabLabel}</span>
                 </div>
               )}
             </div>
