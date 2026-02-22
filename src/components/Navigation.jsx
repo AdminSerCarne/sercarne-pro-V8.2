@@ -28,15 +28,20 @@ const Navigation = () => {
   const menuItems = [
     ...(isAdmin ? [
       { icon: BarChart3, label: 'Dashboard', path: '/vendedor' },
+      { icon: Package, label: 'SERviço', path: '/servico-desossa' },
       { icon: Package, label: 'Admin', path: '/admin' },
     ] : []),
     ...(isVendor ? [
       { icon: Home, label: 'Dashboard', path: homeRoute === '/catalog' ? '/vendedor' : homeRoute },
+      { icon: Package, label: 'SERviço', path: '/servico-desossa' },
     ] : []),
     ...(isPublic || role === 'public' ? [
       { icon: Package, label: 'Catálogo', path: '/catalog' },
     ] : []),
   ];
+  const uniqueMenuItems = menuItems.filter(
+    (item, index, all) => all.findIndex((entry) => entry.path === item.path) === index
+  );
 
   return (
     <nav className="bg-[#1a1a1a] text-white shadow-lg sticky top-0 z-50">
@@ -56,7 +61,7 @@ const Navigation = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            {menuItems.map((item) => {
+            {uniqueMenuItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <button
@@ -120,7 +125,7 @@ const Navigation = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-[#2d2d2d] border-t border-gray-700">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            {menuItems.map((item) => (
+            {uniqueMenuItems.map((item) => (
               <button
                 key={item.label}
                 onClick={() => {

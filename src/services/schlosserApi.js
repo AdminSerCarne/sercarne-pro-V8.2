@@ -374,7 +374,7 @@ export const schlosserApi = {
 
   async getProducts(role) {
     // ✅ BUMP do cache pra não ficar preso no antigo
-    const cacheKey = `${CACHE_PREFIX}products_v8_4_2_pct_cx_priority_fix_images_AE_AF_BE_BF_BG_BH_brand_AG_AH_AI`;
+    const cacheKey = `${CACHE_PREFIX}products_v8_4_3_servico_desossa_dc_dd`;
     const cached = this._getCache(cacheKey);
     if (cached) return cached;
 
@@ -394,19 +394,21 @@ export const schlosserApi = {
      * AG = marca limpa
      * AH = marca bruta (fallback)
      * AI = Código + Nome marca
+     * DC = item do combo de serviço (TRUE/FALSE)
+     * DD = código do produto no modelo serviço
      *
      * AK/AL/E = descrições
      * AC = tipoVenda
      * AX = visível
      */
 
-    // ⚠️ range até BH é obrigatório
+    // ⚠️ range inclui DD para combo serviço
     const query =
-      'SELECT D, I, V, W, X, Y, Z, AA, AE, BE, BG, AF, BF, BH, AG, AH, AI, AK, AL, AC, E, AX WHERE D > 0';
+      'SELECT D, I, V, W, X, Y, Z, AA, AE, BE, BG, AF, BF, BH, AG, AH, AI, AK, AL, AC, E, AX, DC, DD WHERE D > 0';
 
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
       SHEET_NAME
-    )}&range=A9:BH&tq=${encodeURIComponent(query)}`;
+    )}&range=A9:DD&tq=${encodeURIComponent(query)}`;
 
     try {
       const res = await fetch(url);
@@ -443,6 +445,12 @@ export const schlosserApi = {
         const s = String(val).trim();
         if (['#N/A', '#N/A!', '#REF!', '#VALUE!', '#NAME?', 'N/A'].includes(s)) return '';
         return s;
+      };
+      const parseBool = (value) => {
+        if (value === true || value === 1) return true;
+        if (value === false || value === 0) return false;
+        const normalized = String(value ?? '').trim().toLowerCase();
+        return ['true', '1', 'verdadeiro', 'sim', 'yes', 'y'].includes(normalized);
       };
 
       const products = rows
@@ -521,6 +529,9 @@ export const schlosserApi = {
             if (up === 'TRUE' || up === 'VERDADEIRO') isVisible = true;
           }
 
+          const comboServico = parseBool(row[22]); // DC
+          const codigoServico = cleanStr(row[23]); // DD
+
           const processedPrimary = primaryImg ? this._processImageUrl(primaryImg) : '';
 
           return {
@@ -546,6 +557,9 @@ export const schlosserApi = {
             tipoVenda,
             visivel: isVisible,
             ax_raw: axValue,
+            comboServico,
+            codigoServico,
+            combo: comboServico ? 'true' : '',
           };
         })
         .filter(Boolean);

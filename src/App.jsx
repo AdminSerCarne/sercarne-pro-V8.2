@@ -10,6 +10,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import VendorDashboard from "@/pages/VendorDashboard";
 import CatalogPage from "@/pages/CatalogPage";
 import ConfirmacaoPedidoPublica from "@/pages/ConfirmacaoPedidoPublica";
+import ServicoDesossaPage from "@/pages/ServicoDesossaPage";
 import { resolveHomeRoute, resolveUserRole } from "@/domain/accessProfile";
 
 import "@/styles/theme.css";
@@ -117,7 +118,15 @@ export default function App() {
                 path="producao"
                 element={
                   <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
-                    <VendorDashboard />
+                    <ServicoDesossaPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="servico-desossa"
+                element={
+                  <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
+                    <ServicoDesossaPage />
                   </ProtectedRoute>
                 }
               />
