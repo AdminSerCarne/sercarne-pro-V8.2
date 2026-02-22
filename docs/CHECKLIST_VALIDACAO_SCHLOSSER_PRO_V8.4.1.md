@@ -1,6 +1,6 @@
 # CHECKLIST DE VALIDACAO - SCHLOSSER PRO
 
-- Versao: `V8.4.1`
+- Versao: `V8.4.2`
 - Base: `docs/MANUAL_OPERACIONAL_SCHLOSSER_PRO_V8.4.1.md`
 - Uso: pre-release, homologacao e anti-regressao
 
@@ -16,6 +16,7 @@
 
 - [ ] Colunas de preco `V/W/X/Y/Z/AA` aplicadas corretamente conforme volume.
 - [ ] Piso absoluto `TAB5` bloqueia qualquer venda abaixo do minimo.
+- [ ] Excecao validada: `ADMIN LIBERADO (Nivel 10)` pode operar abaixo de `TAB5`.
 - [ ] Usuario nivel `3` recebe preco da `TAB2` (coluna `Z`) ao logar.
 - [ ] `AC = UND`: preco exibido como `/kg`, peso da coluna `I`.
 - [ ] `AC = CX`: preco exibido como `/kg`, peso fixo `10kg` por caixa.
@@ -36,6 +37,7 @@
 - [ ] Status oficiais usados sem variantes fora do padrao.
 - [ ] Niveis `1-5` cancelam apenas pedido enviado.
 - [ ] Niveis `6-10` podem confirmar/avancar status/cancelar com motivo.
+- [ ] Gestor comercial acessa `/vendedor` e nao recebe privilegios exclusivos de admin.
 - [ ] Cancelamentos administrativos registram motivo.
 
 ## 5. Imagens e Marca
@@ -50,6 +52,7 @@
 - [ ] WhatsApp apenas notifica (ciencia), sem confirmar pedido.
 - [ ] WhatsApp nao altera status no banco.
 - [ ] WhatsApp nao grava dados de pedido.
+- [ ] Dashboard de vendedor exibe "Previsao de Comissao" com aviso de que apuracao real depende de NF + recebimento.
 
 ## 7. ENTRADAS_ESTOQUE (Apps Script + Supabase)
 

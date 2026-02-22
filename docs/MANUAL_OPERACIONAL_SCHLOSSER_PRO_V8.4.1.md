@@ -1,6 +1,6 @@
 # MANUAL OPERACIONAL - SCHLOSSER PRO (sercarne.com)
 
-- Versao: `V8.4.1` (OFICIAL - PRODUCAO)
+- Versao: `V8.4.2` (OFICIAL - PRODUCAO)
 - Plataforma: `https://sercarne.com`
 - Status: ATIVA / PRODUCAO
 - Fonte base: Google Sheets
@@ -36,6 +36,11 @@ O manual nao se adapta ao sistema.
 - Inclusao da regra de peso fixo por pacote para calculo de peso estimado.
 - Regra comercial de transferencia: `TAB2` (coluna `Z`) exclusiva para usuario de nivel `3`, aplicada direto ao logar.
 - Exibicao de "Tabela aplicada" somente para usuarios de nivel `5` ou superior.
+
+### V8.4.2
+- Regra oficial de `ADMIN LIBERADO`: usuario admin (`Nivel 10`) pode aplicar menor preco valido entre `TAB0..TAB5`, com autonomia para negociar abaixo de `TAB5`.
+- Gestor comercial deixa de ser tratado como admin no controle de acesso.
+- Dashboard de vendedor formalizado como `PREVISAO DE COMISSAO`, nao como apuracao financeira final.
 
 ---
 
@@ -196,6 +201,9 @@ Regra de sigilo:
 Piso absoluto:
 - `TAB5`
 
+Excecao oficial:
+- `ADMIN LIBERADO (Nivel 10)`: pode operar com menor preco valido entre tabelas e nao fica bloqueado pelo piso `TAB5`.
+
 ## CAPITULO 8 - TABELAS E VOLUME
 
 Modelo de referencia:
@@ -320,6 +328,11 @@ Permissoes:
 - Niveis `1-5`: cria; cancela apenas se `ENVIADO`
 - Niveis `6-10`: confirma; avanca status; cancela com motivo
 
+Perfis de acesso:
+- `Admin`: acesso administrativo completo (`/admin`) e dashboard de pedidos.
+- `Gestor Comercial`: acesso em `/vendedor` (separado de admin), sem poderes exclusivos de admin.
+- `Vendedor/Supervisor/Producao`: acesso em `/vendedor` conforme nivel.
+
 ## CAPITULO 13 - PISO E AJUSTES
 
 Piso absoluto:
@@ -327,6 +340,9 @@ Piso absoluto:
 
 Regra:
 - Nunca vender abaixo do piso.
+
+Excecao oficial:
+- `ADMIN LIBERADO (Nivel 10)` pode negociar abaixo de `TAB5`.
 
 Ajustes exigem:
 - motivo
@@ -403,8 +419,18 @@ Regras obrigatorias:
 Exemplo oficial atual:
 - Codigo `497320` - Hamburguer (2undx150gr) 300gr - cod barra.
 
+## CAPITULO 19 - COMISSAO (PREVISAO OPERACIONAL)
+
+Regra de dashboard:
+- O valor exibido em "Previsao de Comissao" e apenas indicador comercial.
+- Nao representa valor liquido final a pagar ao representante.
+
+Regra de fechamento:
+- Comissao real so e apurada apos emissao da NF e recebimento financeiro do cliente.
+- A base final considera regras contratuais (tributos, frete/logistica, inadimplencia, cancelamentos e devolucoes).
+
 ## DECLARACAO FINAL
 
-Este documento define integralmente a operacao do Schlosser PRO `V8.4.1`.
+Este documento define integralmente a operacao do Schlosser PRO `V8.4.2`.
 Qualquer divergencia entre sistema e este manual e erro de implementacao.
 O manual e soberano.

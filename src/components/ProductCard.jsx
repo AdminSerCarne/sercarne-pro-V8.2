@@ -183,7 +183,7 @@ const ProductCard = ({ product }) => {
     const n = Number(user?.Nivel ?? user?.nivel);
     if (Number.isFinite(n) && n > 0) return n;
     const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
-    if (roleRaw.includes('admin') || roleRaw.includes('gestor')) return 10;
+    if (roleRaw.includes('admin')) return 10;
     return 0;
   }, [user]);
 

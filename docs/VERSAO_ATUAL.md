@@ -1,7 +1,7 @@
 # Schlosser PRO - Versao de Governanca Ativa
 
-- Data de referencia: 2026-02-20
-- Versao oficial vigente: `V8.4.1`
+- Data de referencia: 2026-02-22
+- Versao oficial vigente: `V8.4.2`
 
 ## Documentos oficiais
 

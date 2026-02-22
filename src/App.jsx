@@ -92,7 +92,7 @@ export default function App() {
               <Route
                 path="vendedor"
                 element={
-                  <ProtectedRoute allowedRoles={["vendor", "admin"]}>
+                  <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
                     <VendorDashboard />
                   </ProtectedRoute>
                 }
@@ -100,7 +100,7 @@ export default function App() {
               <Route
                 path="gestorcomercial"
                 element={
-                  <ProtectedRoute allowedRoles={["vendor", "admin"]}>
+                  <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
                     <VendorDashboard />
                   </ProtectedRoute>
                 }
@@ -108,7 +108,7 @@ export default function App() {
               <Route
                 path="supervisor"
                 element={
-                  <ProtectedRoute allowedRoles={["vendor", "admin"]}>
+                  <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
                     <VendorDashboard />
                   </ProtectedRoute>
                 }
@@ -116,7 +116,7 @@ export default function App() {
               <Route
                 path="producao"
                 element={
-                  <ProtectedRoute allowedRoles={["vendor", "admin"]}>
+                  <ProtectedRoute allowedRoles={["vendor", "manager", "admin"]}>
                     <VendorDashboard />
                   </ProtectedRoute>
                 }

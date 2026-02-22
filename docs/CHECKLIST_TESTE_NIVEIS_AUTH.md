@@ -27,10 +27,11 @@ Obs.: se `app login` estiver vazio, o fallback usa `Nivel`:
 
 1. `Nivel 10` (Admin): entra, acessa `/admin` e `/vendedor`.
 2. `Nivel 8/7/6` (Gestor/Supervisor): entra em `/vendedor`, consegue confirmar/avançar/cancelar com motivo.
-3. `Nivel 5` (Vendedor): entra em `/vendedor`, só cancela pedido `PEDIDO ENVIADO`.
-4. `Nivel 3` (Transferência): entra em `/catalog`, validar preço de `TAB2` após login.
-5. `Nivel 2/1` (Cliente): entra em `/catalog`, sem acesso a dashboards.
-6. `ativo=false`: login deve falhar com mensagem de usuário inativo.
+3. `Gestor Comercial`: nao deve acessar `/admin` (separado de perfil admin).
+4. `Nivel 5` (Vendedor): entra em `/vendedor`, só cancela pedido `PEDIDO ENVIADO`.
+5. `Nivel 3` (Transferência): entra em `/catalog`, validar preço de `TAB2` após login.
+6. `Nivel 2/1` (Cliente): entra em `/catalog`, sem acesso a dashboards.
+7. `ativo=false`: login deve falhar com mensagem de usuário inativo.
 
 ## SQL de auditoria rápida
 
@@ -49,4 +50,3 @@ where u.ativo is true
   and coalesce(u.auth_email,'') <> ''
   and a.id is null;
 ```
-

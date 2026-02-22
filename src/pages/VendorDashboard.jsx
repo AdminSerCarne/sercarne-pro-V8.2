@@ -4,7 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
-import { calculateCommissionSummary } from '@/domain/commissionPolicy';
+import { COMMISSION_PREVIEW_DISCLAIMER, calculateCommissionSummary } from '@/domain/commissionPolicy';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,8 @@ const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
 const resolveUserRole = (user) => {
   const roleRaw = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
   const role = String(roleRaw).toLowerCase();
-  if (role.includes('admin') || role.includes('gestor')) return 'admin';
+  if (role.includes('admin')) return 'admin';
+  if (role.includes('gestor')) return 'manager';
   if (role.includes('vendedor') || role.includes('representante')) return 'vendor';
   return 'public';
 };
@@ -129,10 +130,13 @@ const VendorDashboard = () => {
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
   const userRole = useMemo(() => resolveUserRole(user), [user]);
+  const canViewAllOrders = userRole === 'admin' || userRole === 'manager';
   const userLevel = useMemo(() => {
     const n = Number(user?.Nivel ?? user?.nivel);
     if (Number.isFinite(n) && n > 0) return n;
-    return userRole === 'admin' ? 10 : 6;
+    if (userRole === 'admin') return 10;
+    if (userRole === 'manager') return 8;
+    return 6;
   }, [user, userRole]);
   const vendorId = useMemo(() => onlyDigits(user?.login || ''), [user]);
   const [authUid, setAuthUid] = useState(null);
@@ -178,7 +182,7 @@ const VendorDashboard = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (userRole !== 'admin') {
+      if (!canViewAllOrders) {
         if (vendorId) {
           query = query.eq('vendor_id', vendorId);
         } else if (authUid) {
@@ -200,7 +204,7 @@ const VendorDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [authUid, user, userRole, vendorId, toast]);
+  }, [authUid, canViewAllOrders, user, vendorId, toast]);
 
   useEffect(() => {
     fetchOrders();
@@ -211,10 +215,10 @@ const VendorDashboard = () => {
   // -----------------------------------------
   useEffect(() => {
     if (!user) return;
-    if (userRole !== 'admin' && !vendorId && !authUid) return;
+    if (!canViewAllOrders && !vendorId && !authUid) return;
 
-    const scopeKey = userRole === 'admin' ? 'all' : (vendorId || authUid || 'self');
-    const postgresFilter = userRole === 'admin'
+    const scopeKey = canViewAllOrders ? 'all' : (vendorId || authUid || 'self');
+    const postgresFilter = canViewAllOrders
       ? {}
       : vendorId
       ? { filter: `vendor_id=eq.${vendorId}` }
@@ -223,7 +227,7 @@ const VendorDashboard = () => {
       : {};
 
     const belongsToCurrentVendor = (record) => {
-      if (userRole === 'admin') return true;
+      if (canViewAllOrders) return true;
       if (!record) return false;
 
       if (vendorId) {
@@ -282,7 +286,7 @@ const VendorDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUid, user, userRole, vendorId]);
+  }, [authUid, canViewAllOrders, user, vendorId]);
 
   // -----------------------------------------
   // Filters
@@ -564,7 +568,7 @@ const VendorDashboard = () => {
     const actionKind = String(options?.actionKind || '').trim().toUpperCase();
     const isDevolution = actionKind === 'DEVOLUCAO';
 
-    if (userRole !== 'admin') {
+    if (!canViewAllOrders) {
       if (vendorId && onlyDigits(order?.vendor_id) !== vendorId) {
         toast({ title: 'Sem permissão para este pedido', variant: 'destructive' });
         return;
@@ -953,7 +957,7 @@ const VendorDashboard = () => {
               Gestão de Pedidos
             </h1>
             <p className="text-gray-400 mt-1">
-              {userRole === 'admin'
+              {canViewAllOrders
                 ? 'Visualização administrativa de todos os pedidos.'
                 : 'Gerencie, imprima e acompanhe os seus pedidos em tempo real.'}
             </p>
@@ -1003,7 +1007,7 @@ const VendorDashboard = () => {
 
           <Card className="bg-[#121212] border-white/10 text-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Previsão Comissão</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-400">PREVISAO COMISSAO</CardTitle>
               <CheckCircle className="h-4 w-4 text-[#FF6B35]" />
             </CardHeader>
             <CardContent>
@@ -1026,7 +1030,7 @@ const VendorDashboard = () => {
 
         <div className="rounded-lg border border-white/10 bg-[#121212] px-4 py-3 text-xs text-gray-400">
           <p>
-            Previsão de comissão baseada na política comercial. Pagamento real depende de faturamento e recebimento (Cláusulas 3 e 12).
+            {COMMISSION_PREVIEW_DISCLAIMER}
             Pipeline atual: <strong className="text-gray-200">{formatMoney(commissionSummary.totals.pipelineTotal)}</strong>.
           </p>
           {(commissionSummary.warnings.zeroRateCount > 0 || commissionSummary.warnings.inferredTableCount > 0) && (

@@ -11,7 +11,7 @@
 
 - Clausula 1.1 / 4.1(c): representante nao altera preco/tabela/piso livremente.
   Evidencia tecnica:
-  - `src/domain/schlosserRules.js` (aplicacao de tabela + piso TAB5)
+  - `src/domain/schlosserRules.js` (aplicacao de tabela + piso TAB5 com excecao documentada para admin nivel 10)
   - `src/services/schlosserApi.js` (preco a partir de tabelas oficiais do Sheets)
 - Clausula 9.1/9.2: plataforma executa regras documentadas.
   Evidencia documental:
@@ -32,7 +32,8 @@
 
 - Clausula 6.x: comissionamento por faturado/recebido.
   Situacao:
-  - plataforma registra pedidos, mas nao possui motor formal de comissoes por recebimento.
+  - plataforma registra pedidos e exibe previsao operacional de comissao.
+  - nao possui motor formal de apuracao final por faturado/recebido.
 - Clausula 3.x: exclusividade reciproca por termo.
   Situacao:
   - nao existe regra sistemica de exclusividade por marca/territorio no fluxo do pedido.

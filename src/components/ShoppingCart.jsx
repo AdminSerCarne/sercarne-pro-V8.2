@@ -76,9 +76,9 @@ const isAllowedRouteDate = (deliveryDateISO, diasEntregaRaw) => {
 const resolveIsAdminPower = (user) => {
   if (!user) return false;
   const level = Number(user?.Nivel ?? user?.nivel ?? 0);
-  if (Number.isFinite(level) && level >= 8) return true;
+  if (Number.isFinite(level) && level >= 10) return true;
   const roleRaw = String(user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '').toLowerCase();
-  return roleRaw.includes('admin') || roleRaw.includes('gestor');
+  return roleRaw.includes('admin');
 };
 
 const ShoppingCart = ({ isCartOpen, setIsCartOpen }) => {

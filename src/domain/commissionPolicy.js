@@ -1,6 +1,12 @@
 import { ORDER_STATUS, normalizeOrderStatus } from '@/domain/orderStatus';
 import { calculateOrderMetrics } from '@/utils/calculateOrderMetrics';
 
+// Importante: esta politica e PREVISAO operacional para dashboard.
+// A comissao real e apurada somente apos NF emitida + recebimento financeiro,
+// seguindo regras contratuais (tributos, frete/logistica, inadimplencia e devolucoes).
+export const COMMISSION_PREVIEW_DISCLAIMER =
+  'Previsão operacional. Comissão real apenas após emissão da NF e recebimento financeiro, com ajustes contratuais.';
+
 // Ajuste estes percentuais conforme a politica comercial oficial vigente.
 // Percentual em decimal: 1% = 0.01
 export const COMMISSION_TABLE_RATE = Object.freeze({
@@ -222,4 +228,3 @@ export const calculateCommissionSummary = (orders, options = {}) => {
     },
   };
 };
-

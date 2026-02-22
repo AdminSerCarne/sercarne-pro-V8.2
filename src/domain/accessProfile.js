@@ -42,7 +42,8 @@ export const resolveUserRole = (user) => {
   const rawRole = user?.tipo_de_Usuario ?? user?.tipo_usuario ?? user?.role ?? '';
   const role = String(rawRole).trim().toLowerCase();
 
-  if (role.includes('admin') || role.includes('gestor')) return 'admin';
+  if (role.includes('admin')) return 'admin';
+  if (role.includes('gestor')) return 'manager';
 
   if (
     role.includes('vendedor') ||
@@ -79,7 +80,6 @@ export const resolveHomeRoute = (user) => {
   if (level >= 1) return '/catalog';
 
   const role = resolveUserRole(user);
-  if (role === 'admin' || role === 'vendor') return '/vendedor';
+  if (role === 'admin' || role === 'manager' || role === 'vendor') return '/vendedor';
   return '/catalog';
 };
-

@@ -34,7 +34,7 @@
 - Regra oficial de UPSERT por `(codigo, data_entrada)`.
 - Documentacao do calculo de estoque por data.
 
-### V8.4.1 (vigente)
+### V8.4.1
 
 - Inclusao da regra comercial para unidade `PCT` (coluna `AC`):
   - `UND`: preco por `kg`, peso na coluna `I`.
@@ -47,6 +47,15 @@
   - `docs/VERSAO_ATUAL.md`
   - `docs/CHECKLIST_VALIDACAO_SCHLOSSER_PRO_V8.4.1.md`
   - `AGENTS.md`
+
+### V8.4.2 (vigente)
+
+- Formalizacao da excecao `ADMIN LIBERADO` no manual:
+  - admin (`Nivel 10`) pode negociar com menor preco valido entre tabelas (`TAB0..TAB5`), inclusive abaixo de `TAB5`.
+- Separacao de perfil:
+  - gestor comercial deixa de ser tratado como admin no controle de acesso.
+- Dashboard vendedor:
+  - comissao sinalizada explicitamente como `PREVISAO`, com apuracao real vinculada a NF + recebimento.
 
 ## Regras de uso deste historico
 

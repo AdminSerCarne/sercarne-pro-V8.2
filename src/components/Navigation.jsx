@@ -13,7 +13,7 @@ const Navigation = () => {
   const role = resolveUserRole(user);
   const homeRoute = resolveHomeRoute(user);
   const isAdmin = role === "admin";
-  const isVendor = role === "vendor";
+  const isVendor = role === "vendor" || role === "manager";
   const isPublic = !isAuthenticated;
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
