@@ -1,15 +1,13 @@
 import { supabase } from '@/lib/customSupabaseClient';
-import { fetchStockData, getEntradasEstoque } from '@/services/googleSheetsService';
+import { fetchStockData } from '@/services/googleSheetsService';
 import { addDays } from 'date-fns';
-
-const getToday = () => new Date().toISOString().split('T')[0];
 
 let baseStockCache = { data: null, timestamp: 0 };
 let entriesCache = { data: null, timestamp: 0 };
 const CACHE_DURATION = 60 * 1000;
 
 // -------------------------
-// SHEETS CACHE HELPERS
+// CACHE HELPERS
 // -------------------------
 const getBaseStockData = async () => {
   const now = Date.now();
@@ -21,14 +19,57 @@ const getBaseStockData = async () => {
   return data;
 };
 
+const normalizeIsoDate = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw.slice(0, 10);
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [dd, mm, yyyy] = raw.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+};
+
 const getEntriesData = async () => {
   const now = Date.now();
   if (entriesCache.data && (now - entriesCache.timestamp < CACHE_DURATION)) {
     return entriesCache.data;
   }
-  const data = await getEntradasEstoque();
-  entriesCache = { data, timestamp: now };
-  return data;
+
+  const { data, error } = await supabase
+    .from('entradas_estoque')
+    .select('codigo, qtd_und, data_entrada');
+
+  if (error) {
+    console.error('[StockValidator] Error fetching entradas_estoque:', error);
+    entriesCache = { data: [], timestamp: now };
+    return [];
+  }
+
+  const normalized = (Array.isArray(data) ? data : [])
+    .map((entry) => {
+      const codigo = String(entry?.codigo || '').trim();
+      const data_entrada = normalizeIsoDate(entry?.data_entrada);
+      const qtd_und = Number(entry?.qtd_und);
+
+      if (!codigo || !data_entrada || !Number.isFinite(qtd_und) || qtd_und === 0) return null;
+
+      return {
+        codigo,
+        data_entrada,
+        qtd_und,
+      };
+    })
+    .filter(Boolean);
+
+  entriesCache = { data: normalized, timestamp: now };
+  return normalized;
 };
 
 // -------------------------
@@ -159,7 +200,7 @@ export const getStockBreakdown = async (productCode, date) => {
   const entriesUntilDate = allEntries
     .filter(e => String(e.codigo) === safeCode && e.data_entrada <= targetDateStr)
     .reduce((sum, e) => sum + (e.qtd_und || 0), 0);
-  console.log(`Entries (Sheet) <= Date: ${entriesUntilDate}`);
+  console.log(`Entries (Supabase) <= Date: ${entriesUntilDate}`);
 
   // 3. Confirmed Orders (Up to Target Date)
   const { total: pedidosTotal } = await getCommittedOrders(safeCode, targetDateStr);
@@ -198,7 +239,7 @@ export const calcularEstoqueData = async (productCode, date) => {
  * Retorna um map { [codigo]: available } para uma lista de SKUs em uma data.
  * - Reusa cache do Sheets
  * - Faz 1 query no Supabase para pedidos comprometidos
- * - Faz soma eficiente de entradas por SKU (<= data)
+ * - Faz soma eficiente de entradas por SKU no Supabase (<= data)
  */
 export const getAvailableStockForDateBatch = async (productCodes, date) => {
   const targetDateStr = date instanceof Date ? date.toISOString().split('T')[0] : String(date || '').split('T')[0];

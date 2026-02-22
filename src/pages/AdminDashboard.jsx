@@ -21,6 +21,7 @@ import {
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/context/SupabaseAuthContext';
 import Navigation from '@/components/Navigation';
+import AdminStockEntriesPanel from '@/components/AdminStockEntriesPanel';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1200,6 +1201,8 @@ const AdminDashboard = () => {
             </div>
           </CardContent>
         </Card>
+
+        <AdminStockEntriesPanel />
       </div>
     </div>
   );
